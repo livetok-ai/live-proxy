@@ -64,13 +64,13 @@ class Gemini(Model):
         self.session = None
 
 
-client = genai.Client(http_options={"api_version": "v1alpha"})
-
-
+# gemini-2.5-flash-preview-native-audio-dialog
+# gemini-live-2.5-flash-preview
 @contextlib.asynccontextmanager
 async def connect_gemini() -> AsyncGenerator[Gemini, None]:
+    client = genai.Client(http_options={"api_version": "v1alpha"})
     async with client.aio.live.connect(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-flash-preview-native-audio-dialog",
         config={"generation_config": {"response_modalities": ["AUDIO"]}},
     ) as session:
         yield Gemini(session)
