@@ -6,6 +6,7 @@ import re
 import ssl
 import time
 import uuid
+import os
 
 from aiohttp import web
 from aiortc import (
@@ -244,6 +245,7 @@ if __name__ == "__main__":
     parser.add_argument("--key-file")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--timeout", type=int, help="Kill the process after this many seconds")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -259,6 +261,16 @@ if __name__ == "__main__":
     app.on_shutdown.append(on_shutdown)
     app.router.add_post("/", offer)
     app.router.add_static("/demo", "demo")
-    web.run_app(
-        app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
-    )
+
+    async def run_with_timeout():
+        if args.timeout:
+            async def timer():
+                await asyncio.sleep(args.timeout)
+                print(f"Timeout reached ({args.timeout}s), exiting.")
+                os._exit(1)
+            asyncio.create_task(timer())
+        await web._run_app(
+            app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
+        )
+
+    asyncio.run(run_with_timeout())
