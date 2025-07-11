@@ -5,6 +5,7 @@ from av import AudioFrame, AudioResampler
 from PIL.Image import Image
 import io
 
+# from logger import log_info
 from model import Model, Input, Output
 
 
@@ -45,17 +46,21 @@ class Gemini(Model):
     async def recv(self) -> AsyncIterator[Output]:
         received = self.session.receive()
         async for event in received:
-            if event.data is None:
-                # log_info(f"Server Message - {response}")
-                continue
-            mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
-            sample_rate = int(mime_type.split("rate=")[1])
+            if event.data:
+                mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
+                sample_rate = int(mime_type.split("rate=")[1])
 
-            frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
-            frame.sample_rate = sample_rate
-            frame.planes[0].update(event.data)
+                frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
+                frame.sample_rate = sample_rate
+                frame.planes[0].update(event.data)
 
-            yield frame
+                yield frame
+            elif event.server_content:
+                pass
+                # if event.server_content.input_transcription:
+                #     log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                # if event.server_content.output_transcription:
+                #     log_info(f"Output audio transcription: {event.server_content.output_transcription}")
 
     async def close(self):
         if self.session is None:
@@ -68,9 +73,16 @@ class Gemini(Model):
 # gemini-live-2.5-flash-preview
 @contextlib.asynccontextmanager
 async def connect_gemini() -> AsyncGenerator[Gemini, None]:
-    client = genai.Client(http_options={"api_version": "v1alpha"})
+    client = genai.Client()
     async with client.aio.live.connect(
         model="gemini-2.5-flash-preview-native-audio-dialog",
-        config={"generation_config": {"response_modalities": ["AUDIO"]}},
+        config={
+            "generation_config": {
+                "response_modalities": ["AUDIO"],
+            },
+            # "output_audio_transcription": {},
+            # "input_audio_transcription": {},
+        },
+
     ) as session:
         yield Gemini(session)
