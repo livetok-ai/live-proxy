@@ -74,6 +74,6 @@ class OpenAI(Model):
 async def connect_openai() -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
     async with client.beta.realtime.connect(
-        model="gpt-4o-realtime-preview-2024-10-01"
+        model="gpt-4o-realtime-preview-2025-06-03"
     ) as conn:
         yield OpenAI(conn)
