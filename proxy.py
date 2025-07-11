@@ -21,12 +21,12 @@ from PIL import Image
 
 from model_gemini import connect_gemini
 from model_openai import connect_openai
+from logger import log_info
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 16000
 USE_VIDEO_BUFFER = False
 
-logger = logging.getLogger("proxy")
 connections = set()
 
 
@@ -79,10 +79,11 @@ class RTCConnection:
     async def _run(self, model):
         pc_id = str(uuid.uuid4())
 
-        def log_info(msg, *args):
-            logger.info(pc_id + " " + msg, *args)
+        # Use the shared log_info from logger.py
+        def info(msg, *args):
+            log_info(msg, *args, context=pc_id)
 
-        log_info("Connection started")
+        info("Connection started")
 
         @self.pc.on("datachannel")
         def on_datachannel(channel):
@@ -96,7 +97,7 @@ class RTCConnection:
             if not self.pc:
                 return
 
-            log_info("Connection state is %s", self.pc.connectionState)
+            info("Connection state is %s", self.pc.connectionState)
             if (
                 self.pc.connectionState == "failed"
                 or self.pc.connectionState == "closed"
@@ -105,7 +106,7 @@ class RTCConnection:
 
         @self.pc.on("track")
         def on_track(track):
-            log_info("Track %s received", track.kind)
+            info("Track %s received", track.kind)
 
             if track.kind == "audio":
                 # Only accept the first track received for now
@@ -127,7 +128,7 @@ class RTCConnection:
 
             @track.on("ended")
             async def on_ended():
-                log_info("Track %s ended", track.kind)
+                info("Track %s ended", track.kind)
 
         async def run_recv_audio_track():
             while True:
@@ -138,7 +139,7 @@ class RTCConnection:
                     await self.genai_session.send(frame)
 
                 except Exception as e:
-                    log_info("Error receiving frame: %s", e)
+                    info("Error receiving frame: %s", e)
                     break
 
         async def run_recv_video_track():
@@ -174,7 +175,7 @@ class RTCConnection:
                         await self.genai_session.send(image)
 
                 except Exception as e:
-                    log_info("Error receiving frame: %s", e)
+                    info("Error receiving frame: %s", e)
                     break
 
         async def run_send_track():
@@ -201,21 +202,21 @@ class RTCConnection:
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
             async with connect_genai() as session:
-                log_info("Connected to GenAI session")
+                info("Connected to GenAI session")
                 self.genai_session = session
 
                 await run_send_track()
-                log_info("Connection finished")
+                info("Connection finished")
 
         except Exception as e:
-            log_info("Error sending frame: %s", e)
+            info("Error sending frame: %s", e)
 
         try:
             await self.close()
         except Exception as e:
-            log_info("Error closing connection: %s", e)
+            info("Error closing connection: %s", e)
         connections.discard(self)
-        log_info(f"Connection stopped. Connections {len(connections)}")
+        info(f"Connection stopped. Connections {len(connections)}")
 
     async def close(self):
         if self.pc:
