@@ -7,3 +7,4 @@ asyncio
 numpy
 google-genai
 openai[realtime]
+pillow
