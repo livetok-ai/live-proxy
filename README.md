@@ -1,15 +1,18 @@
-# LLM Real-Time Proxy Server 
-This repository contains a Python server proof of concept that acts as a proxy for interacting with large language model (LLM) WebSocket APIs. Currently, it supports Gemini and facilitates real-time communication using WebRTC and WebTransport.
+**Live-Proxy is a [LiveTok Labs project](https://www.livekit.io)**
+
+# Live-Proxy
+
+Live-proxy is an opensource proxy service for interacting with large language model (LLM) WebSocket APIs exposing other interfaces that are better suited for real-time use cases over the Internet. Currently, it supports Gemini and OpenAI speech-to-speech models and facilitates real-time communication using WebRTC and WebTransport.
 
 ## Getting Started
 
 ### Prerequisites
 - Python installed on your system
 - Install requirements with `pip install -r requirements.txt`
-- A valid `GOOGLE_API_KEY`
+- A valid `GOOGLE_API_KEY` or `OPENAI_API_KEY`
 
 ### Running the Server
-1. Set the `GOOGLE_API_KEY` environment variable and run the server:
+1. Set the `GOOGLE_API_KEY` environment variable (or `OPENAI_API_KEY` or both) and run the server:
    ```bash
    GOOGLE_API_KEY=XXX python proxy.py
    ```
@@ -41,6 +44,7 @@ await pc.setRemoteDescription({ type: 'answer', sdp: await resp.text() })
 [X] Audio support
 [X] Basic datachannels support
 [X] Gemini integration
+[X] OpenAI integration
 [ ] WebTransport interface (WIP)
 [X] Video support
 [ ] Implement HTTP real-time control interface 
