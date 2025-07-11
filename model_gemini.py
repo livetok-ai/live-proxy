@@ -76,13 +76,16 @@ async def connect_gemini() -> AsyncGenerator[Gemini, None]:
     client = genai.Client()
     async with client.aio.live.connect(
         model="gemini-2.5-flash-preview-native-audio-dialog",
-        config={
-            "generation_config": {
-                "response_modalities": ["AUDIO"],
-            },
-            # "output_audio_transcription": {},
-            # "input_audio_transcription": {},
-        },
-
+        config=genai.types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            context_window_compression=(
+                # Configures compression with default parameters.
+                genai.types.ContextWindowCompressionConfig(
+                    sliding_window=genai.types.SlidingWindow(),
+                )
+            ),
+            # input_audio_transcription=genai.types.AudioTranscriptionConfig(),
+            # output_audio_transcription=genai.types.AudioTranscriptionConfig(),
+        ),
     ) as session:
         yield Gemini(session)
