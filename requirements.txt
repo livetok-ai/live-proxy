@@ -8,3 +8,5 @@ numpy
 google-genai
 openai[realtime]
 pillow
+aws-sdk-bedrock-runtime
+smithy-aws-core
