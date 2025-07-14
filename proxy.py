@@ -181,11 +181,18 @@ class RTCConnection:
         async def run_send_track():
             timestamp = 0
             buffer = b""
+            last_frame_time = int(time.time() * 1000)
             while self.pc and self.pc.connectionState != "closed":
                 async for frame in self.genai_session.recv():
+                    now = int(time.time() * 1000)
                     sample_rate = frame.sample_rate
                     samples = int(sample_rate * AUDIO_PTIME)
                     buffer += frame.to_ndarray().tobytes()
+
+                    # Compensate for periods of silence not sending anything
+                    if now - last_frame_time > 3 * AUDIO_PTIME:
+                        frames_missing = int((now - last_frame_time) / AUDIO_PTIME)
+                        timestamp += sample_rate * AUDIO_PTIME * frames_missing
 
                     while len(buffer) / 2 >= samples:
                         frame = AudioFrame(format="s16", layout="mono", samples=samples)
@@ -196,8 +203,12 @@ class RTCConnection:
                         timestamp += sample_rate * AUDIO_PTIME
                         frame.pts = timestamp
                         frame.time_base = fractions.Fraction(1, sample_rate)
+                        last_frame_time = int(time.time() * 1000)  # now in epoch milliseconds
                         await self.send_track.queue.put(frame)
                         await asyncio.sleep(AUDIO_PTIME)
+
+                    if len(buffer) > 0:
+                        info(f"Buffer not empty: {len(buffer)}")
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
