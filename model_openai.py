@@ -1,12 +1,13 @@
 import base64
 import contextlib
-from typing import AsyncGenerator, AsyncIterator
-from openai import AsyncOpenAI
-from av import AudioFrame, AudioResampler
-from PIL.Image import Image
 import io
+from typing import AsyncGenerator, AsyncIterator
 
-from model import Model, Input, Output
+from av import AudioFrame, AudioResampler
+from openai import AsyncOpenAI
+from PIL.Image import Image
+
+from model import Input, Model, Output
 
 SAMPLE_RATE = 24000
 AUDIO_PTIME = 0.02

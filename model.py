@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from typing import AsyncIterator, Union
+
 from av import AudioFrame
 from PIL.Image import Image
 

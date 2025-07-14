@@ -1,13 +1,13 @@
 import contextlib
-from typing import AsyncGenerator, AsyncIterator
-from google import genai
-from av import AudioFrame, AudioResampler
-from PIL.Image import Image
 import io
+from typing import AsyncGenerator, AsyncIterator
+
+from av import AudioFrame, AudioResampler
+from google import genai
+from PIL.Image import Image
 
 # from logger import log_info
-from model import Model, Input, Output
-
+from model import Input, Model, Output
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
@@ -47,10 +47,14 @@ class Gemini(Model):
         received = self.session.receive()
         async for event in received:
             if event.data:
-                mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
+                mime_type = event.server_content.model_turn.parts[
+                    0
+                ].inline_data.mime_type
                 sample_rate = int(mime_type.split("rate=")[1])
 
-                frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
+                frame = AudioFrame(
+                    format="s16", layout="mono", samples=len(event.data) / 2
+                )
                 frame.sample_rate = sample_rate
                 frame.planes[0].update(event.data)
 

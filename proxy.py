@@ -2,26 +2,25 @@ import argparse
 import asyncio
 import fractions
 import logging
+import os
 import re
 import ssl
 import time
 import uuid
-import os
 
 from aiohttp import web
 from aiortc import (
     MediaStreamTrack,
+    RTCConfiguration,
     RTCPeerConnection,
     RTCSessionDescription,
-    RTCConfiguration,
 )
-
 from av import AudioFrame
 from PIL import Image
 
+from logger import log_info
 from model_gemini import connect_gemini
 from model_openai import connect_openai
-from logger import log_info
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 16000
@@ -203,7 +202,9 @@ class RTCConnection:
                         timestamp += sample_rate * AUDIO_PTIME
                         frame.pts = timestamp
                         frame.time_base = fractions.Fraction(1, sample_rate)
-                        last_frame_time = int(time.time() * 1000)  # now in epoch milliseconds
+                        last_frame_time = int(
+                            time.time() * 1000
+                        )  # now in epoch milliseconds
                         await self.send_track.queue.put(frame)
                         await asyncio.sleep(AUDIO_PTIME)
 
@@ -257,7 +258,9 @@ if __name__ == "__main__":
     parser.add_argument("--key-file")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--timeout", type=int, help="Kill the process after this many seconds")
+    parser.add_argument(
+        "--timeout", type=int, help="Kill the process after this many seconds"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -276,13 +279,19 @@ if __name__ == "__main__":
 
     async def run_with_timeout():
         if args.timeout:
+
             async def timer():
                 await asyncio.sleep(args.timeout)
                 print(f"Timeout reached ({args.timeout}s), exiting.")
                 os._exit(1)
+
             asyncio.create_task(timer())
         await web._run_app(
-            app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
+            app,
+            access_log=None,
+            host=args.host,
+            port=args.port,
+            ssl_context=ssl_context,
         )
 
     asyncio.run(run_with_timeout())
