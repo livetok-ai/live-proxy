@@ -91,6 +91,8 @@ class RTCConnection:
                 "opus/48000/2\r\n"
                 + f"a=fmtp:{found[0]} useinbandfec=1;usedtx=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
             )
+        # Remove lines with a=fingerprint:sha-384 or a=fingerprint:sha-512
+        sdp = re.sub(r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp, flags=re.MULTILINE)
 
         return web.Response(
             content_type="application/sdp",
