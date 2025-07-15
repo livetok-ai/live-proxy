@@ -49,6 +49,8 @@ class RTCConnection:
     pc = None
     genai_session = None
     callback_url = None
+    timeout_task = None
+    last_message_time = None
 
     async def handle_offer(self, request):
         content_type = request.headers.get('content-type', '').lower()
@@ -73,6 +75,7 @@ class RTCConnection:
 
         model = request.query.get("model")
         self.callback_url = callback
+        self.last_message_time = time.time()
         asyncio.ensure_future(self._run(model, system_instructions))
 
         await self.pc.setRemoteDescription(offer)
@@ -102,11 +105,15 @@ class RTCConnection:
             log_info(msg, *args, context=pc_id)
 
         info("Connection started")
+        
+        # Start timeout timer
+        self.timeout_task = asyncio.create_task(self._timeout_monitor(info))
 
         @self.pc.on("datachannel")
         def on_datachannel(channel):
             @channel.on("message")
             async def on_message(message):
+                self.last_message_time = time.time()
                 if self.genai_session:
                     await self.genai_session.send(message)
 
@@ -152,6 +159,7 @@ class RTCConnection:
             while True:
                 try:
                     frame = await self.recv_audio_track.recv()
+                    self.last_message_time = time.time()
                     if not self.genai_session:
                         continue
                     await self.genai_session.send(frame)
@@ -166,6 +174,7 @@ class RTCConnection:
             while self.pc and self.pc.connectionState != "closed":
                 try:
                     frame = await self.recv_video_track.recv()
+                    self.last_message_time = time.time()
                     if not self.genai_session:
                         continue
 
@@ -249,7 +258,19 @@ class RTCConnection:
         connections.discard(self)
         info(f"Connection stopped. Connections {len(connections)}")
 
+    async def _timeout_monitor(self, info):
+        """Monitor for timeout - close connection if no messages received for 1 minute"""
+        while self.pc and self.pc.connectionState != "closed":
+            await asyncio.sleep(5)  # Check every 5 seconds
+            if self.last_message_time and time.time() - self.last_message_time > 60:
+                info("Connection timed out - no messages received for 1 minute")
+                await self.close()
+                break
+
     async def close(self):
+        if self.timeout_task:
+            self.timeout_task.cancel()
+            self.timeout_task = None
         if self.pc:
             await self.pc.close()
             self.pc = None
