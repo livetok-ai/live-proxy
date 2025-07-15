@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import fractions
+import json
 import logging
 import os
 import re
@@ -8,6 +9,7 @@ import ssl
 import time
 import uuid
 
+import aiohttp
 from aiohttp import web
 from aiortc import (
     MediaStreamTrack,
@@ -46,15 +48,32 @@ class RTCConnection:
     send_track = None
     pc = None
     genai_session = None
+    callback_url = None
 
     async def handle_offer(self, request):
-        content = await request.text()
-        offer = RTCSessionDescription(sdp=content, type="offer")
+        content_type = request.headers.get('content-type', '').lower()
+        
+        if content_type == 'application/json':
+            # Parse JSON body with sdp, systemInstructions, and callback
+            body = await request.json()
+            sdp = body.get('sdp')
+            system_instructions = body.get('system_instructions')
+            callback = body.get('callback')
+            if not sdp:
+                raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
+        else:
+            # Backward compatibility: assume body is the SDP
+            sdp = await request.text()
+            system_instructions = None
+            callback = None
+            
+        offer = RTCSessionDescription(sdp=sdp, type="offer")
 
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
 
         model = request.query.get("model")
-        asyncio.ensure_future(self._run(model))
+        self.callback_url = callback
+        asyncio.ensure_future(self._run(model, system_instructions))
 
         await self.pc.setRemoteDescription(offer)
 
@@ -75,7 +94,7 @@ class RTCConnection:
             text=sdp,
         )
 
-    async def _run(self, model):
+    async def _run(self, model, system_instructions=None):
         pc_id = str(uuid.uuid4())
 
         # Use the shared log_info from logger.py
@@ -213,7 +232,7 @@ class RTCConnection:
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
-            async with connect_genai() as session:
+            async with connect_genai(system_instructions) as session:
                 info("Connected to GenAI session")
                 self.genai_session = session
 
@@ -237,6 +256,23 @@ class RTCConnection:
         if self.genai_session:
             await self.genai_session.close()
             self.genai_session = None
+        
+        # Make callback request if URL is provided
+        if self.callback_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    callback_data = {
+                        "event": "connection_closed",
+                        "timestamp": time.time()
+                    }
+                    async with session.post(
+                        self.callback_url,
+                        json=callback_data,
+                        headers={'Content-Type': 'application/json'}
+                    ) as response:
+                        log_info("Callback sent to %s, status: %d", self.callback_url, response.status)
+            except Exception as e:
+                log_info("Failed to send callback to %s: %s", self.callback_url, e)
 
 
 async def offer(request):

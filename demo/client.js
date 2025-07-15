@@ -55,13 +55,37 @@ function enumerateInputDevices() {
 
 async function negotiate() {
     const model = document.getElementById('model').value;
+    const systemInstructions = document.getElementById('system-instructions').value.trim();
+    const callbackUrl = document.getElementById('callback-url').value.trim();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    let requestBody;
+    let contentType;
+
+    if (systemInstructions || callbackUrl) {
+        // Send JSON body with SDP and optional parameters
+        const body = {
+            sdp: offer.sdp
+        };
+        if (systemInstructions) {
+            body.system_instructions = systemInstructions;
+        }
+        if (callbackUrl) {
+            body.callback = callbackUrl;
+        }
+        requestBody = JSON.stringify(body);
+        contentType = 'application/json';
+    } else {
+        // Send plain SDP for backward compatibility
+        requestBody = offer.sdp;
+        contentType = 'application/sdp';
+    }
+
     const response = await fetch(`/?model=${model}`, {
-        body: offer.sdp,
+        body: requestBody,
         headers: {
-            'Content-Type': 'application/sdp'
+            'Content-Type': contentType
         },
         method: 'POST'
     });

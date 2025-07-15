@@ -72,9 +72,19 @@ class OpenAI(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_openai() -> AsyncGenerator[OpenAI, None]:
+async def connect_openai(system_instructions=None) -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
+    
+    # Build the session config with optional system instructions
+    session_config = {}
+    if system_instructions:
+        session_config["instructions"] = system_instructions
+    
     async with client.beta.realtime.connect(
-        model="gpt-4o-realtime-preview-2025-06-03"
+        model="gpt-4o-realtime-preview-2024-12-17"
     ) as conn:
+        # Apply session config if we have system instructions
+        if session_config:
+            await conn.session.update(**session_config)
+        
         yield OpenAI(conn)

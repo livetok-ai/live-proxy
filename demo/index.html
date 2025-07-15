@@ -47,6 +47,14 @@
         <option value="" selected>Default device</option>
     </select>
 </div>
+<div class="option">
+    <label for="system-instructions">System Instructions</label><br>
+    <textarea id="system-instructions" rows="4" cols="50" placeholder="Enter system instructions for the AI model..."></textarea>
+</div>
+<div class="option">
+    <label for="callback-url">Callback URL (optional)</label><br>
+    <input type="url" id="callback-url" placeholder="https://example.com/webhook" style="width: 400px;">
+</div>
 
 <button id="start" onclick="start().catch(alert)">Start</button>
 <button id="stop" style="display: none" onclick="stop().catch(alert)">Stop</button>
