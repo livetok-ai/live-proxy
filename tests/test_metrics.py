@@ -24,27 +24,19 @@ class TestMetrics(unittest.TestCase):
         """Test incrementing total connections counter."""
         initial_value = metrics.total_connections_counter._value._value
         metrics.increment_connection()
-        self.assertEqual(
-            metrics.total_connections_counter._value._value, initial_value + 1
-        )
+        self.assertEqual(metrics.total_connections_counter._value._value, initial_value + 1)
 
         metrics.increment_connection()
-        self.assertEqual(
-            metrics.total_connections_counter._value._value, initial_value + 2
-        )
+        self.assertEqual(metrics.total_connections_counter._value._value, initial_value + 2)
 
     def test_add_connection_duration(self):
         """Test adding connection duration."""
         initial_value = metrics.connection_duration_counter._value._value
         metrics.add_connection_duration(10.5)
-        self.assertEqual(
-            metrics.connection_duration_counter._value._value, initial_value + 10.5
-        )
+        self.assertEqual(metrics.connection_duration_counter._value._value, initial_value + 10.5)
 
         metrics.add_connection_duration(5.0)
-        self.assertEqual(
-            metrics.connection_duration_counter._value._value, initial_value + 15.5
-        )
+        self.assertEqual(metrics.connection_duration_counter._value._value, initial_value + 15.5)
 
     def test_get_metrics(self):
         """Test getting metrics output."""

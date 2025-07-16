@@ -80,9 +80,7 @@ async def connect_openai(system_instructions=None) -> AsyncGenerator[OpenAI, Non
     if system_instructions:
         session_config["instructions"] = system_instructions
 
-    async with client.beta.realtime.connect(
-        model="gpt-4o-realtime-preview-2024-12-17"
-    ) as conn:
+    async with client.beta.realtime.connect(model="gpt-4o-realtime-preview-2024-12-17") as conn:
         # Apply session config if we have system instructions
         if session_config:
             await conn.session.update(**session_config)

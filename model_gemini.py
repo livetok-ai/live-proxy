@@ -49,14 +49,10 @@ class Gemini(Model):
         received = self.session.receive()
         async for event in received:
             if event.data:
-                mime_type = event.server_content.model_turn.parts[
-                    0
-                ].inline_data.mime_type
+                mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
                 sample_rate = int(mime_type.split("rate=")[1])
 
-                frame = AudioFrame(
-                    format="s16", layout="mono", samples=len(event.data) / 2
-                )
+                frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
                 frame.sample_rate = sample_rate
                 frame.planes[0].update(event.data)
 
@@ -64,9 +60,7 @@ class Gemini(Model):
             else:
                 if event.server_content.interrupted:
                     # log_info(f"Interrupted: {event.server_content.interrupted}")
-                    self._emit(
-                        ModelEvents.INTERRUPTED, event.server_content.interrupted
-                    )
+                    self._emit(ModelEvents.INTERRUPTED, event.server_content.interrupted)
 
                 if event.server_content:
                     if event.server_content.input_transcription:

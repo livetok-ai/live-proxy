@@ -95,13 +95,10 @@ class RTCConnection:
         if found:
             sdp = sdp.replace(
                 "opus/48000/2\r\n",
-                "opus/48000/2\r\n"
-                + f"a=fmtp:{found[0]} useinbandfec=1;usedtx=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
+                "opus/48000/2\r\n" + f"a=fmtp:{found[0]} useinbandfec=1;usedtx=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
             )
         # Remove lines with a=fingerprint:sha-384 or a=fingerprint:sha-512
-        sdp = re.sub(
-            r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp, flags=re.MULTILINE
-        )
+        sdp = re.sub(r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp, flags=re.MULTILINE)
 
         return web.Response(
             content_type="application/sdp",
@@ -134,10 +131,7 @@ class RTCConnection:
                 return
 
             info("Connection state is %s", self.pc.connectionState)
-            if (
-                self.pc.connectionState == "failed"
-                or self.pc.connectionState == "closed"
-            ):
+            if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
                 await self.close()
 
         @self.pc.on("track")
@@ -202,9 +196,7 @@ class RTCConnection:
                             buffer.pop(0)
 
                         # Compose horizontally all the images in buffer
-                        composite = Image.new(
-                            "RGB", (image.width * len(buffer), image.height)
-                        )
+                        composite = Image.new("RGB", (image.width * len(buffer), image.height))
                         for i in range(len(buffer)):
                             composite.paste(buffer[i], (image.width * i, 0))
 
@@ -237,17 +229,17 @@ class RTCConnection:
                     samples = int(sample_rate * AUDIO_PTIME)
                     active = True
                     buffer += frame.to_ndarray().tobytes()
-                
-                # Don't send audio until we have at least one genai frame to 
+
+                # Don't send audio until we have at least one genai frame to
                 # learn the sample rate
                 if active:
                     audio_frame = AudioFrame(format="s16", layout="mono", samples=samples)
                     audio_frame.sample_rate = sample_rate
-                    
+
                     if len(buffer) >= samples * 2:
                         # We have enough data to send
-                        audio_frame.planes[0].update(buffer[:samples * 2])
-                        buffer = buffer[samples * 2:]
+                        audio_frame.planes[0].update(buffer[: samples * 2])
+                        buffer = buffer[samples * 2 :]
                     else:
                         # Not enough data, create silence frame
                         silence_data = np.zeros(samples, dtype=np.int16).tobytes()
@@ -274,8 +266,8 @@ class RTCConnection:
                         "role": role,
                         "content": content,
                     }
-            )
-        
+                )
+
         def on_input_transcription(input_transcription):
             info(f"Input transcription: {input_transcription}")
             add_transcript("user", input_transcription)
@@ -290,23 +282,19 @@ class RTCConnection:
                 self.output_queue.get_nowait()
             while not self.send_track.queue.empty():
                 self.send_track.queue.get_nowait()
-        
+
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
             async with connect_genai(self.system_instructions) as session:
                 info("Connected to GenAI session")
                 self.genai_session = session
 
-                self.genai_session.on(
-                    ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription
-                )
-                self.genai_session.on(
-                    ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription
-                )
+                self.genai_session.on(ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription)
+                self.genai_session.on(ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription)
                 # self.genai_session.on(
                 #     ModelEvents.INTERRUPTED, on_interrupted
                 # )
-                
+
                 # Start the genai receiver task
                 asyncio.ensure_future(run_recv_genai())
 
@@ -327,7 +315,6 @@ class RTCConnection:
         if self.start_time:
             duration = time.time() - self.start_time
             metrics.add_connection_duration(duration)
-
 
         # Make callback request if URL is provided
         if self.callback_url:
@@ -412,9 +399,7 @@ if __name__ == "__main__":
     parser.add_argument("--key-file")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument(
-        "--timeout", type=int, help="Kill the process after this many seconds"
-    )
+    parser.add_argument("--timeout", type=int, help="Kill the process after this many seconds")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
