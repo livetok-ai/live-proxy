@@ -1,80 +1,82 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <meta charset="UTF-8"/>
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebRTC demo</title>
     <style>
-    button {
-        padding: 8px 16px;
-    }
+        button {
+            padding: 8px 16px;
+        }
 
-    pre {
-        overflow-x: hidden;
-        overflow-y: auto;
-    }
+        pre {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
 
-    .option {
-        margin-bottom: 8px;
-    }
+        .option {
+            margin-bottom: 8px;
+        }
 
-    #media {
-        max-width: 1280px;
-    }
+        #media {
+            max-width: 1280px;
+        }
     </style>
 </head>
+
 <body>
 
-<h2>Options</h2>
-<div class="option">
-    <label for="model">Model</label>
-    <select id="model">
-        <option value="gemini" selected>Gemini</option>
-        <option value="openai">GPT-4o</option>
-    </select>
-</div>
-<div class="option">
-    <input id="use-audio" checked="checked" type="checkbox"/>
-    <label for="use-audio">Use audio</label>
-    <select id="audio-input">
-        <option value="" selected>Default device</option>
-    </select>
-</div>
-<div class="option">
-    <input id="use-video" type="checkbox"/>
-    <label for="use-video">Use video</label>
-    <select id="video-input">
-        <option value="" selected>Default device</option>
-    </select>
-</div>
-<div class="option">
-    <label for="system-instructions">System Instructions</label><br>
-    <textarea id="system-instructions" rows="4" cols="50" placeholder="Enter system instructions for the AI model..."></textarea>
-</div>
-<div class="option">
-    <label for="callback-url">Callback URL (optional)</label><br>
-    <input type="url" id="callback-url" placeholder="https://example.com/webhook" style="width: 400px;">
-</div>
+    <h2>Options</h2>
+    <div class="option">
+        <label for="model">Model</label>
+        <select id="model">
+            <option value="gemini" selected>Gemini</option>
+            <option value="openai">GPT-4o</option>
+        </select>
+    </div>
+    <div class="option">
+        <input id="use-audio" checked="checked" type="checkbox" />
+        <label for="use-audio">Use audio</label>
+        <select id="audio-input">
+            <option value="" selected>Default device</option>
+        </select>
+    </div>
+    <div class="option">
+        <input id="use-video" type="checkbox" />
+        <label for="use-video">Use video</label>
+        <select id="video-input">
+            <option value="" selected>Default device</option>
+        </select>
+    </div>
+    <div class="option">
+        <label for="system-instructions">System Instructions</label><br>
+        <textarea id="system-instructions" rows="4" cols="50">You are a helpful assistant.</textarea>
+    </div>
+    <div class="option">
+        <label for="callback-url">Callback URL (optional)</label><br>
+        <input type="url" id="callback-url" placeholder="https://example.com/webhook" style="width: 400px;">
+    </div>
 
-<button id="start" onclick="start().catch(alert)">Start</button>
-<button id="stop" style="display: none" onclick="stop().catch(alert)">Stop</button>
+    <button id="start" onclick="start().catch(alert)">Start</button>
+    <button id="stop" style="display: none" onclick="stop().catch(alert)">Stop</button>
 
-<h2>State</h2>
-<p>
-    Connection state: <span id="ice-connection-state"></span>
-</p>
+    <h2>State</h2>
+    <p>
+        Connection state: <span id="ice-connection-state"></span>
+    </p>
 
-<div id="media" style="display: none">
-    <h2>Media</h2>
+    <div id="media" style="display: none">
+        <h2>Media</h2>
 
-    <audio id="audio" autoplay="true"></audio>
-    <video id="video" autoplay="true" playsinline="true" muted="true"></video>
-</div>
+        <audio id="audio" autoplay="true"></audio>
+        <video id="video" autoplay="true" playsinline="true" muted="true"></video>
+    </div>
 
-<h2>Data channel</h2>
-<pre id="data-channel" style="height: 200px;"></pre>
+    <h2>Data channel</h2>
+    <pre id="data-channel" style="height: 200px;"></pre>
 
-<script src="client.js"></script>
+    <script src="client.js"></script>
 </body>
-</html>
 
+</html>
