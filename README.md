@@ -1,4 +1,4 @@
-**Live-Proxy is a [LiveTok Labs project](https://www.livekit.io)**
+**Live-Proxy is a [LiveTok Labs project](https://www.livetok.io)**
 
 # Live-Proxy
 
