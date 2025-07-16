@@ -10,7 +10,7 @@ from PIL.Image import Image
 from logger import log_info
 from model import Input, Model, Output, ModelEvents
 
-SAMPLE_RATE = 32000
+SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
 
 

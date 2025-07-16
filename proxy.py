@@ -26,7 +26,7 @@ from model_openai import connect_openai
 import metrics
 
 AUDIO_PTIME = 0.02
-AUDIO_BITRATE = 16000
+AUDIO_BITRATE = 32000
 USE_VIDEO_BUFFER = False
 
 connections = set()
