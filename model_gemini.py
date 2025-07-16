@@ -96,4 +96,5 @@ async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, Non
         model="gemini-2.5-flash-preview-native-audio-dialog",
         config=config,
     ) as session:
+        await session.send(input="Greet the user", end_of_turn=True)
         yield Gemini(session)

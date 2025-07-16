@@ -87,4 +87,12 @@ async def connect_openai(system_instructions=None) -> AsyncGenerator[OpenAI, Non
         if session_config:
             await conn.session.update(**session_config)
         
+        await conn.session.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Greet the user"}],
+                }
+            )
+        await conn.session.response.create()
         yield OpenAI(conn)
