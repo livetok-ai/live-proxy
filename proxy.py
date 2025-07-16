@@ -105,7 +105,7 @@ class RTCConnection:
             text=sdp,
         )
 
-    async def _run(self, model, system_instructions=None):
+    async def _run(self, model):
         self.pc_id = str(uuid.uuid4())
 
         # Use the shared log_info from logger.py

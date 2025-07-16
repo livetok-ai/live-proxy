@@ -87,14 +87,17 @@ class Gemini(Model):
 # gemini-live-2.5-flash-preview
 @contextlib.asynccontextmanager
 async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, None]:
-    client = genai.Client()
+    client = genai.Client(
+        http_options=genai.types.HttpOptions(api_version="v1alpha"),
+    )
 
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        # enable_affective_dialog=True,
-        realtime_input_config=genai.types.RealtimeInputConfig(
-            activity_handling=genai.types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-        ),
+        enable_affective_dialog=True,
+        # proactivity=genai.types.ProactivityConfig(proactive_audio=True),
+        # realtime_input_config=genai.types.RealtimeInputConfig(
+        #     activity_handling=genai.types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        # ),
         system_instruction=system_instructions,
         context_window_compression=(
             # Configures compression with default parameters.
