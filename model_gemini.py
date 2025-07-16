@@ -73,13 +73,13 @@ class Gemini(Model):
                         # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
                         self._emit(
                             ModelEvents.INPUT_TRANSCRIPTION,
-                            event.server_content.input_transcription,
+                            event.server_content.input_transcription.text,
                         )
                     if event.server_content.output_transcription:
                         # log_info(f"Output audio transcription: {event.server_content.output_transcription}")
                         self._emit(
                             ModelEvents.OUTPUT_TRANSCRIPTION,
-                            event.server_content.output_transcription,
+                            event.server_content.output_transcription.text,
                         )
 
     async def close(self):

@@ -248,7 +248,7 @@ class RTCConnection:
                     if len(buffer) > 0:
                         info(f"Buffer not empty: {len(buffer)}")
 
-        async def on_input_transcription(self, input_transcription):
+        def on_input_transcription(input_transcription):
             # info(f"Input transcription: {input_transcription}")
 
             if self.transcript and self.transcript[-1]["role"] == "user":
@@ -263,7 +263,8 @@ class RTCConnection:
                     }
                 )
 
-        async def on_output_transcription(self, output_transcription):
+        def on_output_transcription(output_transcription):
+
             # info(f"Output transcription: {output_transcription}")
 
             if self.transcript and self.transcript[-1]["role"] == "model":
