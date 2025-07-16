@@ -103,7 +103,7 @@ def test_audio_constants():
     assert hasattr(proxy, "USE_VIDEO_BUFFER")
 
     assert proxy.AUDIO_PTIME == 0.02
-    assert proxy.AUDIO_BITRATE == 16000
+    assert proxy.AUDIO_BITRATE == 32000
     assert proxy.USE_VIDEO_BUFFER is False
 
 

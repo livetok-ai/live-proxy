@@ -16,7 +16,6 @@ class TestMetricsEndpoint(AioHTTPTestCase):
         app.router.add_get("/metrics", proxy.metrics_endpoint)
         return app
 
-    @unittest_run_loop
     async def test_metrics_endpoint(self):
         """Test the /metrics endpoint returns correct format."""
         # Set some test metrics
@@ -40,7 +39,6 @@ class TestMetricsEndpoint(AioHTTPTestCase):
         # Check specific values
         self.assertIn("live_proxy_open_connections 2.0", text)
 
-    @unittest_run_loop
     async def test_metrics_endpoint_empty(self):
         """Test the /metrics endpoint with no connections."""
         # Reset metrics

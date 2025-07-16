@@ -50,7 +50,9 @@ class RTCConnection:
     send_track = None
     pc = None
     genai_session = None
+    system_instructions = None
     callback_url = None
+    metadata = None
     timeout_task = None
     last_message_time = None
     start_time = None
@@ -60,28 +62,26 @@ class RTCConnection:
         content_type = request.headers.get("content-type", "").lower()
 
         if content_type == "application/json":
-            # Parse JSON body with sdp, systemInstructions, and callback
+            # Parse JSON body with sdp, systemInstructions, callback, and metadata
             body = await request.json()
             sdp = body.get("sdp")
-            system_instructions = body.get("system_instructions")
-            callback = body.get("callback")
+            self.system_instructions = body.get("system_instructions")
+            self.callback_url = body.get("callback")
+            self.metadata = body.get("metadata")
             if not sdp:
                 raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
         else:
             # Backward compatibility: assume body is the SDP
             sdp = await request.text()
-            system_instructions = None
-            callback = None
 
         offer = RTCSessionDescription(sdp=sdp, type="offer")
 
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
 
         model = request.query.get("model")
-        self.callback_url = callback
         self.last_message_time = time.time()
         self.start_time = time.time()
-        asyncio.ensure_future(self._run(model, system_instructions))
+        asyncio.ensure_future(self._run(model))
 
         await self.pc.setRemoteDescription(offer)
 
@@ -107,11 +107,11 @@ class RTCConnection:
         )
 
     async def _run(self, model, system_instructions=None):
-        pc_id = str(uuid.uuid4())
+        self.pc_id = str(uuid.uuid4())
 
         # Use the shared log_info from logger.py
         def info(msg, *args):
-            log_info(msg, *args, context=pc_id)
+            log_info(msg, *args, context=self.pc_id)
 
         info("Connection started")
 
@@ -280,7 +280,7 @@ class RTCConnection:
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
-            async with connect_genai(system_instructions) as session:
+            async with connect_genai(self.system_instructions) as session:
                 info("Connected to GenAI session")
                 self.genai_session = session
 
@@ -302,7 +302,7 @@ class RTCConnection:
         except Exception as e:
             info("Error closing connection: %s", e)
         connections.discard(self)
-        
+
         # Update metrics
         metrics.set_open_connections(len(connections))
         if self.start_time:
@@ -341,6 +341,9 @@ class RTCConnection:
                         "timestamp": time.time(),
                         "transcript": self.transcript,
                     }
+                    # Add metadata if it was provided
+                    if self.metadata is not None:
+                        callback_data["metadata"] = self.metadata
                     async with session.post(
                         self.callback_url,
                         json=callback_data,
