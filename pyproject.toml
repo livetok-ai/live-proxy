@@ -30,6 +30,7 @@ dependencies = [
     "pillow",
     "aws-sdk-bedrock-runtime",
     "smithy-aws-core",
+    "prometheus-client>=0.22.1",
 ]
 
 [project.optional-dependencies]

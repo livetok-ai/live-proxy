@@ -23,6 +23,7 @@ from PIL import Image
 from logger import log_info
 from model_gemini import connect_gemini
 from model_openai import connect_openai
+import metrics
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 16000
@@ -51,6 +52,7 @@ class RTCConnection:
     callback_url = None
     timeout_task = None
     last_message_time = None
+    start_time = None
 
     async def handle_offer(self, request):
         content_type = request.headers.get('content-type', '').lower()
@@ -76,6 +78,7 @@ class RTCConnection:
         model = request.query.get("model")
         self.callback_url = callback
         self.last_message_time = time.time()
+        self.start_time = time.time()
         asyncio.ensure_future(self._run(model, system_instructions))
 
         await self.pc.setRemoteDescription(offer)
@@ -258,6 +261,13 @@ class RTCConnection:
         except Exception as e:
             info("Error closing connection: %s", e)
         connections.discard(self)
+        
+        # Update metrics
+        metrics.set_open_connections(len(connections))
+        if self.start_time:
+            duration = time.time() - self.start_time
+            metrics.add_connection_duration(duration)
+        
         info(f"Connection stopped. Connections {len(connections)}")
 
     async def _timeout_monitor(self, info):
@@ -301,7 +311,21 @@ class RTCConnection:
 async def offer(request):
     connection = RTCConnection()
     connections.add(connection)
+    
+    # Update metrics
+    metrics.increment_connection()
+    metrics.set_open_connections(len(connections))
+    
     return await connection.handle_offer(request)
+
+
+async def metrics_endpoint(request):
+    """Prometheus metrics endpoint."""
+    return web.Response(
+        body=metrics.get_metrics(),
+        content_type="text/plain; version=0.0.4",
+        charset="utf-8"
+    )
 
 
 async def on_shutdown(app):
@@ -334,6 +358,7 @@ if __name__ == "__main__":
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
     app.router.add_post("/", offer)
+    app.router.add_get("/metrics", metrics_endpoint)
     app.router.add_static("/demo", "demo")
 
     async def run_with_timeout():
