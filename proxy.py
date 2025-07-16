@@ -1,13 +1,14 @@
 import argparse
 import asyncio
+import collections
 import fractions
-import json
 import logging
 import os
 import re
 import ssl
 import time
 import uuid
+import numpy as np
 
 import aiohttp
 from aiohttp import web
@@ -57,6 +58,7 @@ class RTCConnection:
     last_message_time = None
     start_time = None
     transcript = []
+    output_queue = asyncio.Queue()
 
     async def handle_offer(self, request):
         content_type = request.headers.get("content-type", "").lower()
@@ -214,71 +216,81 @@ class RTCConnection:
                     info("Error receiving frame: %s", e)
                     break
 
+        async def run_recv_genai():
+            while self.pc and self.pc.connectionState != "closed":
+                async for frame in self.genai_session.recv():
+                    self.output_queue.put_nowait(frame)
+
         async def run_send_track():
             timestamp = 0
             buffer = b""
-            last_frame_time = int(time.time() * 1000)
+            active = False
+            sample_rate = 0
+            samples = 0
+            next_send_time = time.time()
+
             while self.pc and self.pc.connectionState != "closed":
-                async for frame in self.genai_session.recv():
-                    now = int(time.time() * 1000)
+                # Check if there's a frame in the output queue
+                if not self.output_queue.empty():
+                    frame = self.output_queue.get_nowait()
                     sample_rate = frame.sample_rate
                     samples = int(sample_rate * AUDIO_PTIME)
+                    active = True
                     buffer += frame.to_ndarray().tobytes()
+                
+                # Don't send audio until we have at least one genai frame to 
+                # learn the sample rate
+                if active:
+                    audio_frame = AudioFrame(format="s16", layout="mono", samples=samples)
+                    audio_frame.sample_rate = sample_rate
+                    
+                    if len(buffer) >= samples * 2:
+                        # We have enough data to send
+                        audio_frame.planes[0].update(buffer[:samples * 2])
+                        buffer = buffer[samples * 2:]
+                    else:
+                        # Not enough data, create silence frame
+                        silence_data = np.zeros(samples, dtype=np.int16).tobytes()
+                        audio_frame.planes[0].update(silence_data)
+                    timestamp += sample_rate * AUDIO_PTIME
+                    audio_frame.pts = timestamp
+                    audio_frame.time_base = fractions.Fraction(1, sample_rate)
+                    self.send_track.queue.put_nowait(audio_frame)
 
-                    # Compensate for periods of silence not sending anything
-                    if now - last_frame_time > 3 * AUDIO_PTIME:
-                        frames_missing = int((now - last_frame_time) / AUDIO_PTIME)
-                        timestamp += sample_rate * AUDIO_PTIME * frames_missing
+                # Calculate how much time to sleep to maintain AUDIO_PTIME interval
+                sleep_time = next_send_time - time.time()
+                if sleep_time > 0:
+                    await asyncio.sleep(min(sleep_time, AUDIO_PTIME))
+                next_send_time += AUDIO_PTIME
 
-                    while len(buffer) / 2 >= samples:
-                        frame = AudioFrame(format="s16", layout="mono", samples=samples)
-                        frame.sample_rate = sample_rate
-                        frame.planes[0].update(buffer[: samples * 2])
-                        buffer = buffer[samples * 2 :]
-
-                        timestamp += sample_rate * AUDIO_PTIME
-                        frame.pts = timestamp
-                        frame.time_base = fractions.Fraction(1, sample_rate)
-                        last_frame_time = int(
-                            time.time() * 1000
-                        )  # now in epoch milliseconds
-                        await self.send_track.queue.put(frame)
-                        await asyncio.sleep(AUDIO_PTIME)
-
-                    if len(buffer) > 0:
-                        info(f"Buffer not empty: {len(buffer)}")
-
-        def on_input_transcription(input_transcription):
-            # info(f"Input transcription: {input_transcription}")
-
-            if self.transcript and self.transcript[-1]["role"] == "user":
+        def add_transcript(role, content):
+            if self.transcript and self.transcript[-1]["role"] == role:
                 prev = self.transcript[-1]
-                prev["content"] += input_transcription
+                prev["content"] += content
             else:
                 self.transcript.append(
                     {
                         "timestamp": time.time(),
-                        "role": "user",
-                        "content": input_transcription,
+                        "role": role,
+                        "content": content,
                     }
-                )
+            )
+        
+        def on_input_transcription(input_transcription):
+            info(f"Input transcription: {input_transcription}")
+            add_transcript("user", input_transcription)
 
         def on_output_transcription(output_transcription):
+            info(f"Output transcription: {output_transcription}")
+            add_transcript("model", output_transcription)
 
-            # info(f"Output transcription: {output_transcription}")
-
-            if self.transcript and self.transcript[-1]["role"] == "model":
-                prev = self.transcript[-1]
-                prev["content"] += output_transcription
-            else:
-                self.transcript.append(
-                    {
-                        "timestamp": time.time(),
-                        "role": "model",
-                        "content": output_transcription,
-                    }
-                )
-
+        def on_interrupted():
+            # info("Received INTERRUPTED event, clearing output queue")
+            while not self.output_queue.empty():
+                self.output_queue.get_nowait()
+            while not self.send_track.queue.empty():
+                self.send_track.queue.get_nowait()
+        
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
             async with connect_genai(self.system_instructions) as session:
@@ -291,6 +303,12 @@ class RTCConnection:
                 self.genai_session.on(
                     ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription
                 )
+                # self.genai_session.on(
+                #     ModelEvents.INTERRUPTED, on_interrupted
+                # )
+                
+                # Start the genai receiver task
+                asyncio.ensure_future(run_recv_genai())
 
                 await run_send_track()
                 info("Connection finished")
@@ -310,7 +328,35 @@ class RTCConnection:
             duration = time.time() - self.start_time
             metrics.add_connection_duration(duration)
 
-        info(f"Connection stopped. Connections {len(connections)}")
+
+        # Make callback request if URL is provided
+        if self.callback_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    callback_data = {
+                        "session_id": self.pc_id,
+                        "event": "session_closed",
+                        "timestamp": int(time.time() * 1000),
+                        "duration": int(duration * 1000),
+                        "transcript": self.transcript,
+                    }
+                    # Add metadata if it was provided
+                    if self.metadata is not None:
+                        callback_data["metadata"] = self.metadata
+                    async with session.post(
+                        self.callback_url,
+                        json=callback_data,
+                        headers={"Content-Type": "application/json"},
+                    ) as response:
+                        log_info(
+                            "Callback sent to %s, status: %d",
+                            self.callback_url,
+                            response.status,
+                        )
+            except Exception as e:
+                log_info("Failed to send callback to %s: %s", self.callback_url, e)
+
+        info(f"Connection stopped. Transcript: {len(self.transcript)}. Connections {len(connections)}")
 
     async def _timeout_monitor(self, info):
         """Monitor for timeout - close connection if no messages received for 1 minute"""
@@ -331,32 +377,6 @@ class RTCConnection:
         if self.genai_session:
             await self.genai_session.close()
             self.genai_session = None
-
-        # Make callback request if URL is provided
-        if self.callback_url:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    callback_data = {
-                        "session_id": self.pc_id,
-                        "event": "session_closed",
-                        "timestamp": time.time(),
-                        "transcript": self.transcript,
-                    }
-                    # Add metadata if it was provided
-                    if self.metadata is not None:
-                        callback_data["metadata"] = self.metadata
-                    async with session.post(
-                        self.callback_url,
-                        json=callback_data,
-                        headers={"Content-Type": "application/json"},
-                    ) as response:
-                        log_info(
-                            "Callback sent to %s, status: %d",
-                            self.callback_url,
-                            response.status,
-                        )
-            except Exception as e:
-                log_info("Failed to send callback to %s: %s", self.callback_url, e)
 
 
 async def offer(request):
