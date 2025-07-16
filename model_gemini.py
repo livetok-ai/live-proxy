@@ -7,7 +7,8 @@ from google import genai
 from PIL.Image import Image
 
 # from logger import log_info
-from model import Input, Model, Output
+from logger import log_info
+from model import Input, Model, Output, ModelEvents
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
@@ -15,6 +16,7 @@ AUDIO_PTIME = 0.02
 
 class Gemini(Model):
     def __init__(self, session):
+        super().__init__()
         self.session = session
         self.resampler = AudioResampler(
             format="s16",
@@ -60,11 +62,12 @@ class Gemini(Model):
 
                 yield frame
             elif event.server_content:
-                pass
-                # if event.server_content.input_transcription:
-                #     log_info(f"Input audio transcription: {event.server_content.input_transcription}")
-                # if event.server_content.output_transcription:
-                #     log_info(f"Output audio transcription: {event.server_content.output_transcription}")
+                if event.server_content.input_transcription:
+                    log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                    self._emit(ModelEvents.INPUT_TRANSCRIPTION, event.server_content.input_transcription)
+                if event.server_content.output_transcription:
+                    log_info(f"Output audio transcription: {event.server_content.output_transcription}")
+                    self._emit(ModelEvents.OUTPUT_TRANSCRIPTION, event.server_content.output_transcription)
 
     async def close(self):
         if self.session is None:
@@ -88,8 +91,8 @@ async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, Non
                 sliding_window=genai.types.SlidingWindow(),
             )
         ),
-        # input_audio_transcription=genai.types.AudioTranscriptionConfig(),
-        # output_audio_transcription=genai.types.AudioTranscriptionConfig(),
+        input_audio_transcription=genai.types.AudioTranscriptionConfig(),
+        output_audio_transcription=genai.types.AudioTranscriptionConfig(),
     )
     
     async with client.aio.live.connect(
