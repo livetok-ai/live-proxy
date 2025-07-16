@@ -126,6 +126,7 @@ exclude_lines = [
 
 [dependency-groups]
 dev = [
+    "black>=25.1.0",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",

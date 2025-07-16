@@ -4,18 +4,16 @@ from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATE
 
 # Metrics
 open_connections_gauge = Gauge(
-    'live_proxy_open_connections',
-    'Number of currently open WebRTC connections'
+    "live_proxy_open_connections", "Number of currently open WebRTC connections"
 )
 
 total_connections_counter = Counter(
-    'live_proxy_total_connections',
-    'Total number of WebRTC connections created'
+    "live_proxy_total_connections", "Total number of WebRTC connections created"
 )
 
 connection_duration_counter = Counter(
-    'live_proxy_connection_duration_seconds_total',
-    'Total duration of all connections in seconds'
+    "live_proxy_connection_duration_seconds_total",
+    "Total duration of all connections in seconds",
 )
 
 

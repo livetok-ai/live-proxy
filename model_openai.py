@@ -74,25 +74,25 @@ class OpenAI(Model):
 @contextlib.asynccontextmanager
 async def connect_openai(system_instructions=None) -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
-    
+
     # Build the session config with optional system instructions
     session_config = {}
     if system_instructions:
         session_config["instructions"] = system_instructions
-    
+
     async with client.beta.realtime.connect(
         model="gpt-4o-realtime-preview-2024-12-17"
     ) as conn:
         # Apply session config if we have system instructions
         if session_config:
             await conn.session.update(**session_config)
-        
+
         await conn.session.conversation.item.create(
-                item={
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "Greet the user"}],
-                }
-            )
+            item={
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Greet the user"}],
+            }
+        )
         await conn.session.response.create()
         yield OpenAI(conn)

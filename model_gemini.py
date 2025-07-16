@@ -61,13 +61,26 @@ class Gemini(Model):
                 frame.planes[0].update(event.data)
 
                 yield frame
-            elif event.server_content:
-                if event.server_content.input_transcription:
-                    log_info(f"Input audio transcription: {event.server_content.input_transcription}")
-                    self._emit(ModelEvents.INPUT_TRANSCRIPTION, event.server_content.input_transcription)
-                if event.server_content.output_transcription:
-                    log_info(f"Output audio transcription: {event.server_content.output_transcription}")
-                    self._emit(ModelEvents.OUTPUT_TRANSCRIPTION, event.server_content.output_transcription)
+            else:
+                if event.server_content.interrupted:
+                    # log_info(f"Interrupted: {event.server_content.interrupted}")
+                    self._emit(
+                        ModelEvents.INTERRUPTED, event.server_content.interrupted
+                    )
+
+                if event.server_content:
+                    if event.server_content.input_transcription:
+                        # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                        self._emit(
+                            ModelEvents.INPUT_TRANSCRIPTION,
+                            event.server_content.input_transcription,
+                        )
+                    if event.server_content.output_transcription:
+                        # log_info(f"Output audio transcription: {event.server_content.output_transcription}")
+                        self._emit(
+                            ModelEvents.OUTPUT_TRANSCRIPTION,
+                            event.server_content.output_transcription,
+                        )
 
     async def close(self):
         if self.session is None:
@@ -81,9 +94,13 @@ class Gemini(Model):
 @contextlib.asynccontextmanager
 async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, None]:
     client = genai.Client()
-    
+
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
+        # enable_affective_dialog=True,
+        realtime_input_config=genai.types.RealtimeInputConfig(
+            activity_handling=genai.types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        ),
         system_instruction=system_instructions,
         context_window_compression=(
             # Configures compression with default parameters.
@@ -94,7 +111,7 @@ async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, Non
         input_audio_transcription=genai.types.AudioTranscriptionConfig(),
         output_audio_transcription=genai.types.AudioTranscriptionConfig(),
     )
-    
+
     async with client.aio.live.connect(
         model="gemini-2.5-flash-preview-native-audio-dialog",
         config=config,

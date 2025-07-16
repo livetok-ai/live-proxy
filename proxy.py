@@ -21,6 +21,7 @@ from av import AudioFrame
 from PIL import Image
 
 from logger import log_info
+from model import ModelEvents
 from model_gemini import connect_gemini
 from model_openai import connect_openai
 import metrics
@@ -53,16 +54,17 @@ class RTCConnection:
     timeout_task = None
     last_message_time = None
     start_time = None
+    transcript = []
 
     async def handle_offer(self, request):
-        content_type = request.headers.get('content-type', '').lower()
-        
-        if content_type == 'application/json':
+        content_type = request.headers.get("content-type", "").lower()
+
+        if content_type == "application/json":
             # Parse JSON body with sdp, systemInstructions, and callback
             body = await request.json()
-            sdp = body.get('sdp')
-            system_instructions = body.get('system_instructions')
-            callback = body.get('callback')
+            sdp = body.get("sdp")
+            system_instructions = body.get("system_instructions")
+            callback = body.get("callback")
             if not sdp:
                 raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
         else:
@@ -70,7 +72,7 @@ class RTCConnection:
             sdp = await request.text()
             system_instructions = None
             callback = None
-            
+
         offer = RTCSessionDescription(sdp=sdp, type="offer")
 
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
@@ -95,7 +97,9 @@ class RTCConnection:
                 + f"a=fmtp:{found[0]} useinbandfec=1;usedtx=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
             )
         # Remove lines with a=fingerprint:sha-384 or a=fingerprint:sha-512
-        sdp = re.sub(r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp, flags=re.MULTILINE)
+        sdp = re.sub(
+            r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp, flags=re.MULTILINE
+        )
 
         return web.Response(
             content_type="application/sdp",
@@ -110,7 +114,7 @@ class RTCConnection:
             log_info(msg, *args, context=pc_id)
 
         info("Connection started")
-        
+
         # Start timeout timer
         self.timeout_task = asyncio.create_task(self._timeout_monitor(info))
 
@@ -244,11 +248,48 @@ class RTCConnection:
                     if len(buffer) > 0:
                         info(f"Buffer not empty: {len(buffer)}")
 
+        async def on_input_transcription(self, input_transcription):
+            # info(f"Input transcription: {input_transcription}")
+
+            if self.transcript and self.transcript[-1]["role"] == "user":
+                prev = self.transcript[-1]
+                prev["content"] += input_transcription
+            else:
+                self.transcript.append(
+                    {
+                        "timestamp": time.time(),
+                        "role": "user",
+                        "content": input_transcription,
+                    }
+                )
+
+        async def on_output_transcription(self, output_transcription):
+            # info(f"Output transcription: {output_transcription}")
+
+            if self.transcript and self.transcript[-1]["role"] == "model":
+                prev = self.transcript[-1]
+                prev["content"] += output_transcription
+            else:
+                self.transcript.append(
+                    {
+                        "timestamp": time.time(),
+                        "role": "model",
+                        "content": output_transcription,
+                    }
+                )
+
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
             async with connect_genai(system_instructions) as session:
                 info("Connected to GenAI session")
                 self.genai_session = session
+
+                self.genai_session.on(
+                    ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription
+                )
+                self.genai_session.on(
+                    ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription
+                )
 
                 await run_send_track()
                 info("Connection finished")
@@ -267,7 +308,7 @@ class RTCConnection:
         if self.start_time:
             duration = time.time() - self.start_time
             metrics.add_connection_duration(duration)
-        
+
         info(f"Connection stopped. Connections {len(connections)}")
 
     async def _timeout_monitor(self, info):
@@ -289,21 +330,27 @@ class RTCConnection:
         if self.genai_session:
             await self.genai_session.close()
             self.genai_session = None
-        
+
         # Make callback request if URL is provided
         if self.callback_url:
             try:
                 async with aiohttp.ClientSession() as session:
                     callback_data = {
-                        "event": "connection_closed",
-                        "timestamp": time.time()
+                        "session_id": self.pc_id,
+                        "event": "session_closed",
+                        "timestamp": time.time(),
+                        "transcript": self.transcript,
                     }
                     async with session.post(
                         self.callback_url,
                         json=callback_data,
-                        headers={'Content-Type': 'application/json'}
+                        headers={"Content-Type": "application/json"},
                     ) as response:
-                        log_info("Callback sent to %s, status: %d", self.callback_url, response.status)
+                        log_info(
+                            "Callback sent to %s, status: %d",
+                            self.callback_url,
+                            response.status,
+                        )
             except Exception as e:
                 log_info("Failed to send callback to %s: %s", self.callback_url, e)
 
@@ -311,11 +358,11 @@ class RTCConnection:
 async def offer(request):
     connection = RTCConnection()
     connections.add(connection)
-    
+
     # Update metrics
     metrics.increment_connection()
     metrics.set_open_connections(len(connections))
-    
+
     return await connection.handle_offer(request)
 
 
@@ -324,7 +371,7 @@ async def metrics_endpoint(request):
     return web.Response(
         body=metrics.get_metrics(),
         content_type="text/plain; version=0.0.4",
-        charset="utf-8"
+        charset="utf-8",
     )
 
 
