@@ -33,7 +33,7 @@ async def _make_callback(connection, duration, callback, metadata):
     try:
         async with aiohttp.ClientSession() as session:
             data = {
-                "session_id": connection.pc_id,
+                "connection_id": connection.id,
                 "event": "session_closed",
                 "timestamp": int(time.time() * 1000),
                 "duration": int(duration * 1000),
@@ -103,7 +103,7 @@ async def create_connection(request):
             body=json.dumps(
                 {
                     "sdp": sdp_response,
-                    "id": conn_info.connection.pc_id,
+                    "id": conn_info.connection.id,
                 }
             ),
         )
@@ -123,7 +123,7 @@ async def delete_connection(request):
 
     conn_info = None
     for info in connections:
-        if info.connection.pc_id == connection_id:
+        if info.connection.id == connection_id:
             conn_info = info
             break
 

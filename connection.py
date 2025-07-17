@@ -36,6 +36,7 @@ class SendingTrack(MediaStreamTrack):
 
 
 class Connection:
+    id = str(uuid.uuid4())
     recv_audio_track = None
     recv_video_track = None
     send_track = None
@@ -79,13 +80,10 @@ class Connection:
 
         return sdp_response
 
-    # Use the shared log_info from logger.py
     def info(self, msg, *args):
-        log_info(msg, *args, context=self.pc_id)
+        log_info(msg, *args, context=self.id)
 
     async def _run(self, model):
-        self.pc_id = str(uuid.uuid4())
-
         self.info("Connection started")
 
         # Start timeout timer
