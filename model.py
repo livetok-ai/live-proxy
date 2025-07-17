@@ -47,8 +47,13 @@ class Model:
             event_type: The type of event being emitted
             data: The event data to pass to handlers
         """
+        from logger import log_info
+        
         for handler in self._event_handlers[event_type]:
-            handler(data)
+            try:
+                handler(data)
+            except Exception as e:
+                log_info(f"Error in event handler for {event_type}: {e}")
 
     @abstractmethod
     async def send(self, _input: Input):

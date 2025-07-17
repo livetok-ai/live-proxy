@@ -81,7 +81,7 @@ class Connection:
 
     # Use the shared log_info from logger.py
     def info(self, msg, *args):
-        log_info(msg, *args, context=self.pc_id)
+        log_info(msg, *args, context=getattr(self, 'pc_id', None))
 
     async def _run(self, model):
         self.pc_id = str(uuid.uuid4())
