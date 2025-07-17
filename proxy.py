@@ -117,9 +117,7 @@ async def delete_connection(request):
     connection_id = request.match_info.get("connection_id")
 
     if not connection_id:
-        return web.Response(
-            status=400, body=json.dumps({"error": "Missing connection_id"}), content_type="application/json"
-        )
+        raise web.HTTPBadRequest(text="Missing connection_id")
 
     conn_info = None
     for info in connections:
@@ -128,9 +126,7 @@ async def delete_connection(request):
             break
 
     if not conn_info:
-        return web.Response(
-            status=404, body=json.dumps({"error": "Connection not found"}), content_type="application/json"
-        )
+        raise web.HTTPNotFound(text="Connection not found")
 
     try:
         await conn_info.connection.close()
@@ -139,9 +135,7 @@ async def delete_connection(request):
         )
     except Exception as e:
         log_info(f"Error closing connection {connection_id}: {e}")
-        return web.Response(
-            status=500, body=json.dumps({"error": "Failed to close connection"}), content_type="application/json"
-        )
+        raise web.HTTPInternalServerError(text="Failed to close connection")
 
 
 async def metrics_endpoint(request):
