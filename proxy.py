@@ -19,7 +19,7 @@ import metrics
 @dataclass(frozen=True)
 class ConnectionInfo:
     connection: Connection
-    callback_url: Optional[str] = None
+    callback: Optional[str] = None
     metadata: Optional[dict] = None
 
     def __hash__(self):
@@ -29,7 +29,7 @@ class ConnectionInfo:
 connections = set()  # Set of ConnectionInfo objects
 
 
-async def _make_callback(connection, duration, callback_url, metadata):
+async def _make_callback(connection, duration, callback, metadata):
     try:
         async with aiohttp.ClientSession() as session:
             data = {
@@ -41,17 +41,17 @@ async def _make_callback(connection, duration, callback_url, metadata):
                 "metadata": metadata,
             }
             async with session.post(
-                callback_url,
+                callback,
                 json=data,
                 headers={"Content-Type": "application/json"},
             ) as response:
                 log_info(
                     "Callback sent to %s, status: %d",
-                    callback_url,
+                    callback,
                     response.status,
                 )
     except Exception as e:
-        log_info("Failed to send callback to %s: %s", callback_url, e)
+        log_info("Failed to send callback to %s: %s", callback, e)
 
 
 async def offer(request):
@@ -74,8 +74,8 @@ async def offer(request):
             metrics.set_open_connections(len(connections))
 
             # Make callback request if URL is provided
-            if conn_info.callback_url:
-                asyncio.create_task(_make_callback(connection, duration, conn_info.callback_url, conn_info.metadata))
+            if conn_info.callback:
+                asyncio.create_task(_make_callback(connection, duration, conn_info.callback, conn_info.metadata))
 
     # Parse request
     content_type = request.headers.get("content-type", "").lower()
@@ -85,7 +85,7 @@ async def offer(request):
         body = await request.json()
         sdp = body.get("sdp")
         system_instructions = body.get("system_instructions")
-        callback_url = body.get("callback")
+        callback = body.get("callback")
         metadata = body.get("metadata")
         if not sdp:
             raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
@@ -93,14 +93,14 @@ async def offer(request):
         # Backward compatibility: assume body is the SDP
         sdp = await request.text()
         system_instructions = None
-        callback_url = None
+        callback = None
         metadata = None
 
     model = request.query.get("model")
 
     # Create and start connection
     connection = Connection(on_closed=on_connection_closed)
-    conn_info = ConnectionInfo(connection=connection, callback_url=callback_url, metadata=metadata)
+    conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
     connections.add(conn_info)
 
     # Update metrics
@@ -110,8 +110,13 @@ async def offer(request):
     try:
         sdp_response = await connection.start(sdp, model, system_instructions)
         return web.Response(
-            content_type="application/sdp",
-            text=sdp_response,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "sdp": sdp_response,
+                    "id": conn_info.connection.pc_id,
+                }
+            ),
         )
     except Exception as e:
         connections.discard(conn_info)

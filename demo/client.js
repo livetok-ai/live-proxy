@@ -1,6 +1,6 @@
 // get DOM elements
 const dataChannelLog = document.getElementById('data-channel'),
-      iceConnectionLog = document.getElementById('ice-connection-state');
+    iceConnectionLog = document.getElementById('ice-connection-state');
 
 var pc = null;
 var dc = null;
@@ -63,24 +63,18 @@ async function negotiate() {
     let requestBody;
     let contentType;
 
-    if (systemInstructions || callbackUrl) {
-        // Send JSON body with SDP and optional parameters
-        const body = {
-            sdp: offer.sdp
-        };
-        if (systemInstructions) {
-            body.system_instructions = systemInstructions;
-        }
-        if (callbackUrl) {
-            body.callback = callbackUrl;
-        }
-        requestBody = JSON.stringify(body);
-        contentType = 'application/json';
-    } else {
-        // Send plain SDP for backward compatibility
-        requestBody = offer.sdp;
-        contentType = 'application/sdp';
+    // Send JSON body with SDP and optional parameters
+    const body = {
+        sdp: offer.sdp
+    };
+    if (systemInstructions) {
+        body.system_instructions = systemInstructions;
     }
+    if (callbackUrl) {
+        body.callback = callbackUrl;
+    }
+    requestBody = JSON.stringify(body);
+    contentType = 'application/json';
 
     const response = await fetch(`/?model=${model}`, {
         body: requestBody,
@@ -89,12 +83,11 @@ async function negotiate() {
         },
         method: 'POST'
     });
- 
-    const sdp = await response.text();
-    console.log(sdp)
+
+    const result = await response.json();
     const answer = new RTCSessionDescription({
         type: 'answer',
-        sdp: sdp
+        sdp: result.sdp,
     });
     await pc.setRemoteDescription(answer);
 }
