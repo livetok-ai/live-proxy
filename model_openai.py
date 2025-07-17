@@ -24,7 +24,6 @@ class OpenAI(Model):
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
 
-
     async def send(self, input: Input):
         if isinstance(input, str):
             await self.session.conversation.item.create(

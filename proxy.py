@@ -6,6 +6,7 @@ import ssl
 import time
 from dataclasses import dataclass
 from typing import Optional
+import json
 
 import aiohttp
 from aiohttp import web
@@ -20,6 +21,9 @@ class ConnectionInfo:
     connection: Connection
     callback_url: Optional[str] = None
     metadata: Optional[dict] = None
+
+    def __hash__(self):
+        return self.connection.__hash__()
 
 
 connections = set()  # Set of ConnectionInfo objects
