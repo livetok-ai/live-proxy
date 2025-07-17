@@ -30,22 +30,19 @@ connections = set()  # Set of ConnectionInfo objects
 
 
 async def _make_callback(connection, duration, callback_url, metadata):
-    """Make callback request to notify about session closure"""
     try:
         async with aiohttp.ClientSession() as session:
-            callback_data = {
+            data = {
                 "session_id": connection.pc_id,
                 "event": "session_closed",
                 "timestamp": int(time.time() * 1000),
                 "duration": int(duration * 1000),
                 "transcript": connection.transcript,
+                "metadata": metadata,
             }
-            # Add metadata if it was provided
-            if metadata is not None:
-                callback_data["metadata"] = metadata
             async with session.post(
                 callback_url,
-                json=callback_data,
+                json=data,
                 headers={"Content-Type": "application/json"},
             ) as response:
                 log_info(
@@ -65,6 +62,8 @@ async def offer(request):
             if info.connection == connection:
                 conn_info = info
                 break
+
+        log_info(f"Connection closed: {conn_info}")
 
         if conn_info:
             connections.discard(conn_info)

@@ -105,8 +105,8 @@ class Connection:
                 return
 
             self.info("Connection state is %s", self.pc.connectionState)
-            # if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
-            #     await self.close()
+            if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
+                await self.close()
 
         @self.pc.on("track")
         def on_track(track):
