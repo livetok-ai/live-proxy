@@ -105,8 +105,8 @@ class Connection:
                 return
 
             self.info("Connection state is %s", self.pc.connectionState)
-            if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
-                await self.close()
+            # if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
+            #     await self.close()
 
         @self.pc.on("track")
         def on_track(track):
@@ -184,8 +184,11 @@ class Connection:
 
         async def run_recv_genai():
             while self.pc and self.pc.connectionState != "closed":
-                async for frame in self.genai_session.recv():
-                    self.output_queue.put_nowait(frame)
+                try:
+                    async for frame in self.genai_session.recv():
+                        self.output_queue.put_nowait(frame)
+                except Exception as e:
+                    self.info("Error receiving from genai")
 
         async def run_send_track():
             timestamp = 0
@@ -293,7 +296,7 @@ class Connection:
             await asyncio.sleep(5)  # Check every 5 seconds
             if self.last_message_time and time.time() - self.last_message_time > 60:
                 self.info("Connection timed out - no messages received for 1 minute")
-                await self.close()
+                asyncio.ensure_future(self.close())
                 break
 
     async def close(self):
