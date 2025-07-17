@@ -7,9 +7,8 @@ Live-proxy is an opensource proxy service for interacting with large language mo
 ## Getting Started
 
 ### Prerequisites
-- Python installed on your system
-- Install requirements with `pip install -r requirements.txt`
-- A valid `GOOGLE_API_KEY` or `OPENAI_API_KEY`
+
+See README_DEV.md
 
 ### Running the Server
 1. Set the `GOOGLE_API_KEY` environment variable (or `OPENAI_API_KEY` or both) and run the server:

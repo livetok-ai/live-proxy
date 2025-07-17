@@ -102,7 +102,7 @@ pytest tests/test_proxy.py::test_basic_import -v
 
 All development tool configurations are in `pyproject.toml`:
 
-- **Black**: Line length 88, Python 3.8+ target
+- **Black**: Line length 120, Python 3.8+ target
 - **Ruff**: Modern linting with common rules enabled
 - **mypy**: Strict type checking configuration
 - **pytest**: Auto async mode, coverage reporting
