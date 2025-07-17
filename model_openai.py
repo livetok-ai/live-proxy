@@ -15,6 +15,7 @@ AUDIO_PTIME = 0.02
 
 class OpenAI(Model):
     def __init__(self, session):
+        super().__init__()
         self.session = session
         self.resampler = AudioResampler(
             format="s16",
@@ -22,6 +23,7 @@ class OpenAI(Model):
             rate=SAMPLE_RATE,
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
+
 
     async def send(self, input: Input):
         if isinstance(input, str):
@@ -80,17 +82,14 @@ async def connect_openai(system_instructions=None) -> AsyncGenerator[OpenAI, Non
     if system_instructions:
         session_config["instructions"] = system_instructions
 
-    async with client.beta.realtime.connect(model="gpt-4o-realtime-preview-2024-12-17") as conn:
-        # Apply session config if we have system instructions
-        if session_config:
-            await conn.session.update(**session_config)
-
-        await conn.session.conversation.item.create(
-            item={
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "Greet the user"}],
-            }
-        )
-        await conn.session.response.create()
+    async with client.beta.realtime.connect(model="gpt-4o-realtime-preview-2025-06-03") as conn:
+        # TODO: Add system instructions and greeting
+        # await conn.session.conversation.item.create(
+        #     item={
+        #         "type": "message",
+        #         "role": "user",
+        #         "content": [{"type": "input_text", "text": "Greet the user"}],
+        #     }
+        # )
+        # await conn.session.response.create()
         yield OpenAI(conn)

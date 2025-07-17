@@ -61,8 +61,8 @@ class Gemini(Model):
                 if event.server_content:
                     if event.server_content.interrupted:
                         # log_info(f"Interrupted: {event.server_content.interrupted}")
-                        self._emit(ModelEvents.INTERRUPTED, event.server_content.interrupted)
-                        
+                        self._emit(ModelEvents.INTERRUPTED)
+
                     if event.server_content.input_transcription:
                         # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
                         self._emit(

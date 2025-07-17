@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import AsyncIterator, Union, Callable, Any
+from typing import AsyncIterator, Union, Callable, Any, Optional
 from collections import defaultdict
 
 from av import AudioFrame
@@ -40,7 +40,7 @@ class Model:
         if handler in self._event_handlers[event_type]:
             self._event_handlers[event_type].remove(handler)
 
-    def _emit(self, event_type: str, data: Any):
+    def _emit(self, event_type: str, data: Optional[Any] = None):
         """Emit an event to all registered handlers.
 
         Args:
@@ -48,16 +48,7 @@ class Model:
             data: The event data to pass to handlers
         """
         for handler in self._event_handlers[event_type]:
-            try:
-                handler(data)
-            except Exception as e:
-                # Import here to avoid circular imports
-                try:
-                    from logger import log_info
-
-                    log_info(f"Error in event handler for {event_type}: {e}")
-                except ImportError:
-                    print(f"Error in event handler for {event_type}: {e}")
+            handler(data)
 
     @abstractmethod
     async def send(self, _input: Input):
