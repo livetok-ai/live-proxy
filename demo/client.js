@@ -56,7 +56,6 @@ function enumerateInputDevices() {
 async function negotiate() {
     const model = document.getElementById('model').value;
     const systemInstructions = document.getElementById('system-instructions').value.trim();
-    const callbackUrl = document.getElementById('callback-url').value.trim();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -70,13 +69,10 @@ async function negotiate() {
     if (systemInstructions) {
         body.system_instructions = systemInstructions;
     }
-    if (callbackUrl) {
-        body.callback = callbackUrl;
-    }
     requestBody = JSON.stringify(body);
     contentType = 'application/json';
 
-    const response = await fetch(`/?model=${model}`, {
+    const response = await fetch(`/connection?model=${model}`, {
         body: requestBody,
         headers: {
             'Content-Type': contentType

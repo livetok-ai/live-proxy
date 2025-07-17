@@ -54,7 +54,7 @@ async def _make_callback(connection, duration, callback, metadata):
         log_info("Failed to send callback to %s: %s", callback, e)
 
 
-async def offer(request):
+async def create_connection(request):
     def on_connection_closed(connection):
         # Find and remove the connection info
         conn_info = None
@@ -113,6 +113,37 @@ async def offer(request):
         raise
 
 
+async def delete_connection(request):
+    connection_id = request.match_info.get("connection_id")
+
+    if not connection_id:
+        return web.Response(
+            status=400, body=json.dumps({"error": "Missing connection_id"}), content_type="application/json"
+        )
+
+    conn_info = None
+    for info in connections:
+        if info.connection.pc_id == connection_id:
+            conn_info = info
+            break
+
+    if not conn_info:
+        return web.Response(
+            status=404, body=json.dumps({"error": "Connection not found"}), content_type="application/json"
+        )
+
+    try:
+        await conn_info.connection.close()
+        return web.Response(
+            status=200, body=json.dumps({"message": "Connection closed successfully"}), content_type="application/json"
+        )
+    except Exception as e:
+        log_info(f"Error closing connection {connection_id}: {e}")
+        return web.Response(
+            status=500, body=json.dumps({"error": "Failed to close connection"}), content_type="application/json"
+        )
+
+
 async def metrics_endpoint(request):
     """Prometheus metrics endpoint."""
     return web.Response(
@@ -148,7 +179,8 @@ if __name__ == "__main__":
 
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
-    app.router.add_post("/", offer)
+    app.router.add_post("/connection", create_connection)
+    app.router.add_delete("/connection/{connection_id}", delete_connection)
     app.router.add_get("/metrics", metrics_endpoint)
     app.router.add_static("/demo", "demo")
 

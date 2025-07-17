@@ -48,7 +48,7 @@ class Model:
             data: The event data to pass to handlers
         """
         from logger import log_info
-        
+
         for handler in self._event_handlers[event_type]:
             try:
                 handler(data)
