@@ -77,24 +77,13 @@ async def offer(request):
             if conn_info.callback:
                 asyncio.create_task(_make_callback(connection, duration, conn_info.callback, conn_info.metadata))
 
-    # Parse request
-    content_type = request.headers.get("content-type", "").lower()
-
-    if content_type == "application/json":
-        # Parse JSON body with sdp, systemInstructions, callback, and metadata
-        body = await request.json()
-        sdp = body.get("sdp")
-        system_instructions = body.get("system_instructions")
-        callback = body.get("callback")
-        metadata = body.get("metadata")
-        if not sdp:
-            raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
-    else:
-        # Backward compatibility: assume body is the SDP
-        sdp = await request.text()
-        system_instructions = None
-        callback = None
-        metadata = None
+    body = await request.json()
+    sdp = body.get("sdp")
+    system_instructions = body.get("system_instructions")
+    callback = body.get("callback")
+    metadata = body.get("metadata")
+    if not sdp:
+        raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
 
     model = request.query.get("model")
 
