@@ -79,17 +79,17 @@ class Connection:
 
         return sdp_response
 
+    # Use the shared log_info from logger.py
+    def info(self, msg, *args):
+        log_info(msg, *args, context=self.pc_id)
+
     async def _run(self, model):
         self.pc_id = str(uuid.uuid4())
 
-        # Use the shared log_info from logger.py
-        def info(msg, *args):
-            log_info(msg, *args, context=self.pc_id)
-
-        info("Connection started")
+        self.info("Connection started")
 
         # Start timeout timer
-        self.timeout_task = asyncio.create_task(self._timeout_monitor(info))
+        self.timeout_task = asyncio.create_task(self._timeout_monitor(self.info))
 
         @self.pc.on("datachannel")
         def on_datachannel(channel):
@@ -104,13 +104,13 @@ class Connection:
             if not self.pc:
                 return
 
-            info("Connection state is %s", self.pc.connectionState)
+            self.info("Connection state is %s", self.pc.connectionState)
             if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
                 await self.close()
 
         @self.pc.on("track")
         def on_track(track):
-            info("Track %s received", track.kind)
+            self.info("Track %s received", track.kind)
 
             if track.kind == "audio":
                 # Only accept the first track received for now
@@ -132,7 +132,7 @@ class Connection:
 
             @track.on("ended")
             async def on_ended():
-                info("Track %s ended", track.kind)
+                self.info("Track %s ended", track.kind)
 
         async def run_recv_audio_track():
             while True:
@@ -144,7 +144,7 @@ class Connection:
                     await self.genai_session.send(frame)
 
                 except Exception as e:
-                    info("Error receiving frame: %s", e)
+                    self.info("Error receiving frame: %s", e)
                     break
 
         async def run_recv_video_track():
@@ -179,7 +179,7 @@ class Connection:
                         await self.genai_session.send(image)
 
                 except Exception as e:
-                    info("Error receiving frame: %s", e)
+                    self.info("Error receiving frame: %s", e)
                     break
 
         async def run_recv_genai():
@@ -243,15 +243,15 @@ class Connection:
                 )
 
         def on_input_transcription(input_transcription):
-            info(f"Input transcription: {input_transcription}")
+            self.info(f"Input transcription: {input_transcription}")
             add_transcript("user", input_transcription)
 
         def on_output_transcription(output_transcription):
-            info(f"Output transcription: {output_transcription}")
+            self.info(f"Output transcription: {output_transcription}")
             add_transcript("model", output_transcription)
 
         def on_interrupted(event=None):
-            info("Received INTERRUPTED event, clearing output queue")
+            self.info("Received INTERRUPTED event, clearing output queue")
             while not self.output_queue.empty():
                 self.output_queue.get_nowait()
             while not self.send_track.queue.empty():
@@ -260,7 +260,7 @@ class Connection:
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
             async with connect_genai(self.system_instructions) as session:
-                info("Connected to GenAI session")
+                self.info("Connected to GenAI session")
                 self.genai_session = session
 
                 self.genai_session.on(ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription)
@@ -271,32 +271,34 @@ class Connection:
                 asyncio.ensure_future(run_recv_genai())
 
                 await run_send_track()
-                info("Connection finished")
+                self.info("Connection finished")
 
         except Exception as e:
-            info("Error sending frame: %s", e)
+            self.info("Error sending frame: %s", e)
 
         try:
             await self.close()
         except Exception as e:
-            info("Error closing connection: %s", e)
+            self.info("Error closing connection: %s", e)
 
         # Notify parent about connection closure
         if self.on_closed:
             self.on_closed(self)
 
-        info(f"Connection stopped. Transcript: {len(self.transcript)}.")
+        self.info(f"Connection stopped. Transcript: {len(self.transcript)}.")
 
     async def _timeout_monitor(self, info):
         """Monitor for timeout - close connection if no messages received for 1 minute"""
         while self.pc and self.pc.connectionState != "closed":
             await asyncio.sleep(5)  # Check every 5 seconds
             if self.last_message_time and time.time() - self.last_message_time > 60:
-                info("Connection timed out - no messages received for 1 minute")
+                self.info("Connection timed out - no messages received for 1 minute")
                 await self.close()
                 break
 
     async def close(self):
+        self.info("Closing connection")
+
         if self.timeout_task:
             self.timeout_task.cancel()
             self.timeout_task = None

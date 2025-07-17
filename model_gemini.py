@@ -77,6 +77,8 @@ class Gemini(Model):
                         )
 
     async def close(self):
+        log_info("Closing Gemini session")
+        
         if self.session is None:
             return
         await self.session.close()

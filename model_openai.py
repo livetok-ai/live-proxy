@@ -4,6 +4,7 @@ import io
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
+from logger import log_info
 from openai import AsyncOpenAI
 from PIL.Image import Image
 
@@ -69,6 +70,8 @@ class OpenAI(Model):
                 yield frame
 
     async def close(self):
+        log_info("Closing OpenAI session")
+
         await self.session.close()
 
 
