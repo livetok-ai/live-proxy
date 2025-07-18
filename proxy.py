@@ -54,6 +54,8 @@ async def _make_callback(connection, duration, callback, metadata):
 
 
 async def create_connection(request):
+    log_info(f"HTTP create connection request")
+
     def on_connection_closed(connection):
         # Find and remove the connection info
         conn_info = None
@@ -114,6 +116,8 @@ async def create_connection(request):
 
 async def delete_connection(request):
     connection_id = request.match_info.get("connection_id")
+
+    log_info(f"HTTP delete connection request {connection_id}")
 
     if not connection_id:
         raise web.HTTPBadRequest(text="Missing connection_id")
