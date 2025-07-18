@@ -85,17 +85,15 @@ class Gemini(Model):
         self.session = None
 
 
-# gemini-2.5-flash-preview-native-audio-dialog
-# gemini-live-2.5-flash-preview
 @contextlib.asynccontextmanager
-async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, None]:
+async def connect_gemini(model: str, system_instructions=None) -> AsyncGenerator[Gemini, None]:
     client = genai.Client(
         http_options=genai.types.HttpOptions(api_version="v1alpha"),
     )
 
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        enable_affective_dialog=True,
+        enable_affective_dialog=True if "native" in model else None,
         # proactivity=genai.types.ProactivityConfig(proactive_audio=True),
         # realtime_input_config=genai.types.RealtimeInputConfig(
         #     activity_handling=genai.types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
@@ -112,7 +110,7 @@ async def connect_gemini(system_instructions=None) -> AsyncGenerator[Gemini, Non
     )
 
     async with client.aio.live.connect(
-        model="gemini-2.5-flash-preview-native-audio-dialog",
+        model="gemini-2.5-flash-preview-native-audio-dialog" if model == "gemini" else model,
         config=config,
     ) as session:
         await session.send(input="Greet the user", end_of_turn=True)

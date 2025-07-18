@@ -260,7 +260,7 @@ class Connection:
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
-            async with connect_genai(self.system_instructions) as session:
+            async with connect_genai(model, self.system_instructions) as session:
                 self.info("Connected to GenAI session")
                 self.genai_session = session
 
