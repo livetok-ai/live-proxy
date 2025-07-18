@@ -191,23 +191,21 @@ class Connection:
         async def run_send_track():
             timestamp = 0
             buffer = b""
-            active = False
             sample_rate = 0
             samples = 0
             next_send_time = time.time()
 
             while self.pc and self.pc.connectionState != "closed":
                 # Check if there's a frame in the output queue
-                if not self.output_queue.empty():
+                if (not buffer or len(buffer) < samples * 2) and not self.output_queue.empty():
                     frame = self.output_queue.get_nowait()
                     sample_rate = frame.sample_rate
                     samples = int(sample_rate * AUDIO_PTIME)
-                    active = True
                     buffer += frame.to_ndarray().tobytes()
 
                 # Don't send audio until we have at least one genai frame to
                 # learn the sample rate
-                if active:
+                if sample_rate:
                     audio_frame = AudioFrame(format="s16", layout="mono", samples=samples)
                     audio_frame.sample_rate = sample_rate
 
@@ -252,7 +250,7 @@ class Connection:
             add_transcript("model", output_transcription)
 
         def on_interrupted(event=None):
-            self.info("Received INTERRUPTED event, clearing output queue")
+            self.info(f"Received INTERRUPTED event, clearing output queue {self.output_queue.qsize()}")
             while not self.output_queue.empty():
                 self.output_queue.get_nowait()
             while not self.send_track.queue.empty():
