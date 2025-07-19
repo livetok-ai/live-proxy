@@ -88,6 +88,10 @@ async def create_connection(request):
 
     model = request.query.get("model")
 
+    log_info(
+        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions} metadata: {metadata}"
+    )
+
     # Create and start connection
     connection = Connection(on_closed=on_connection_closed)
     conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
