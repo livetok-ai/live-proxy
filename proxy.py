@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import ssl
+import sys
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -13,6 +14,10 @@ from aiohttp import web
 from connection import Connection
 from logger import log_info
 import metrics
+
+
+def in_venv():
+    return sys.prefix != sys.base_prefix
 
 
 @dataclass(frozen=True)
@@ -82,6 +87,7 @@ async def create_connection(request):
     sdp = body.get("sdp")
     system_instructions = body.get("system_instructions")
     callback = body.get("callback")
+    tools = body.get("tools")
     metadata = body.get("metadata")
     if not sdp:
         raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
@@ -102,7 +108,7 @@ async def create_connection(request):
     metrics.set_open_connections(len(connections))
 
     try:
-        sdp_response = await connection.start(sdp, model, system_instructions)
+        sdp_response = await connection.start(sdp, model, system_instructions, tools)
         return web.Response(
             content_type="application/json",
             body=json.dumps(
@@ -162,6 +168,9 @@ async def on_shutdown(app):
 
 
 if __name__ == "__main__":
+    if not in_venv():
+        log_info("RUNNING IN A NON VENV")
+
     parser = argparse.ArgumentParser(description="Real Time LLM Proxy")
     parser.add_argument("--cert-file")
     parser.add_argument("--key-file")

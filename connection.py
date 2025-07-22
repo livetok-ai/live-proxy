@@ -52,10 +52,10 @@ class Connection:
     def __init__(self, on_closed=None):
         self.on_closed = on_closed
 
-    async def start(self, sdp, model, system_instructions=None):
+    async def start(self, sdp, model, system_instructions=None, tools=None):
         """Start the RTC connection with the given parameters"""
         self.system_instructions = system_instructions
-
+        self.tools = tools
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
 
@@ -181,8 +181,8 @@ class Connection:
                     break
 
         async def run_recv_genai():
-            while self.pc and self.pc.connectionState != "closed":
-                try:
+            try:
+                while self.pc and self.pc.connectionState != "closed":
                     async for frame in self.genai_session.recv():
                         self.output_queue.put_nowait(frame)
             except Exception as e:
@@ -258,7 +258,7 @@ class Connection:
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
-            async with connect_genai(model, self.system_instructions) as session:
+            async with connect_genai(model, self.system_instructions, self.tools) as session:
                 self.info("Connected to GenAI session")
                 self.genai_session = session
 

@@ -56,6 +56,7 @@ function enumerateInputDevices() {
 async function negotiate() {
     const model = document.getElementById('model').value;
     const systemInstructions = document.getElementById('system-instructions').value.trim();
+    const tools = JSON.parse(document.getElementById('tools').value.trim());
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -64,11 +65,10 @@ async function negotiate() {
 
     // Send JSON body with SDP and optional parameters
     const body = {
-        sdp: offer.sdp
+        sdp: offer.sdp,
+        system_instructions: systemInstructions,
+        tools: tools,
     };
-    if (systemInstructions) {
-        body.system_instructions = systemInstructions;
-    }
     requestBody = JSON.stringify(body);
     contentType = 'application/json';
 

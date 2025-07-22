@@ -15,9 +15,10 @@ AUDIO_PTIME = 0.02
 
 
 class Gemini(Model):
-    def __init__(self, session):
+    def __init__(self, session, tools):
         super().__init__()
         self.session = session
+        self.tools = tools
         self.resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -57,6 +58,22 @@ class Gemini(Model):
                 frame.planes[0].update(event.data)
 
                 yield frame
+            elif event.tool_call:
+                function_responses = []
+                log_info(f"Tool call: {event.tool_call}")
+                for fc in event.tool_call.function_calls:
+                    tool = next((t for t in self.tools if t["name"] == fc.name), None)
+                    if tool:
+                        log_info(f"Tool call: {fc} found: {tool}")
+                    else:
+                        log_info(f"Tool call: {fc} not found: {fc.name}")
+
+                    function_response = genai.types.FunctionResponse(
+                        name=fc.name, response={"result": "ok"}  # simple, hard-coded function response
+                    )
+                    function_responses.append(function_response)
+
+                await self.session.send_tool_response(function_responses=function_responses)
             else:
                 if event.server_content:
                     if event.server_content.interrupted:
@@ -86,21 +103,31 @@ class Gemini(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_gemini(model: str, system_instructions=None) -> AsyncGenerator[Gemini, None]:
+async def connect_gemini(model: str, system_instructions=None, tools=None) -> AsyncGenerator[Gemini, None]:
     client = genai.Client(
         http_options=genai.types.HttpOptions(api_version="v1alpha"),
+    )
+
+    all_tools = (
+        [
+            {
+                "function_declarations": [
+                    {"name": tool["name"], "description": tool["description"], "parameters": tool["parameters"]}
+                    for tool in tools
+                ]
+            }
+        ]
+        if tools
+        else None
     )
 
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
         enable_affective_dialog=True if "native" in model else None,
         # proactivity=genai.types.ProactivityConfig(proactive_audio=True),
-        # realtime_input_config=genai.types.RealtimeInputConfig(
-        #     activity_handling=genai.types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-        # ),
         system_instruction=system_instructions,
+        tools=all_tools,
         context_window_compression=(
-            # Configures compression with default parameters.
             genai.types.ContextWindowCompressionConfig(
                 sliding_window=genai.types.SlidingWindow(),
             )
@@ -114,4 +141,4 @@ async def connect_gemini(model: str, system_instructions=None) -> AsyncGenerator
         config=config,
     ) as session:
         await session.send(input="Greet the user", end_of_turn=True)
-        yield Gemini(session)
+        yield Gemini(session, tools)

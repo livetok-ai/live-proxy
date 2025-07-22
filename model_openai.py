@@ -76,7 +76,7 @@ class OpenAI(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_openai(model: str, system_instructions=None) -> AsyncGenerator[OpenAI, None]:
+async def connect_openai(model: str, system_instructions=None, tools=None) -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
 
     # Build the session config with optional system instructions

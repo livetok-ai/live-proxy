@@ -76,6 +76,64 @@ Remember, you're not reading from a script. You're just... talking.
         </textarea>
     </div>
 
+    <div class="option">
+        <label for="tools">Tools</label><br>
+        <textarea id="tools" rows="10" cols="120">
+            [
+                {
+                    "name": "find_appointment",
+                    "description": "Use this tool to find an existing appointment from a customer and get the details of the appointment (date, time, service and appointment id)",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "phone_number": {
+                                "type": "STRING",
+                                "description": "The phone number of the customer"
+                            }
+                        }
+                    },
+                    "response": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "appointment": {
+                                "type": "OBJECT",
+                                "description": "The appointment details if found"
+                            }
+                        }
+                    },
+                    "url": "http://localhost:3000/api/live-proxy/tools"
+                },
+                {
+                    "name": "book_appointment",
+                    "description": "Use this tool to book an appointment",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "phone_number": {
+                                "type": "STRING",
+                                "description": "The phone number of the customer"
+                            },
+                            "date": {
+                                "type": "STRING",
+                                "description": "The date of the appointment"
+                            },
+                            "time": {
+                                "type": "STRING",
+                                "description": "The time of the appointment"
+                            },
+                            "service": {
+                                "type": "STRING",
+                                "description": "The service of the appointment"
+                            }
+                        }
+                    },
+                    "url": "http://localhost:3000/api/live-proxy/tools"
+                }
+            ]
+        </textarea>
+    </div>
+
+
     <button id="start" onclick="start().catch(alert)">Start</button>
     <button id="stop" style="display: none" onclick="stop().catch(alert)">Stop</button>
 
