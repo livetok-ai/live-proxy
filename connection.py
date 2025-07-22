@@ -185,8 +185,8 @@ class Connection:
                 try:
                     async for frame in self.genai_session.recv():
                         self.output_queue.put_nowait(frame)
-                except Exception as e:
-                    self.info("Error receiving from genai")
+            except Exception as e:
+                self.info("Error receiving from genai: %s", e)
 
         async def run_send_track():
             timestamp = 0
