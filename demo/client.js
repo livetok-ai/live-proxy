@@ -57,6 +57,8 @@ async function negotiate() {
     const model = document.getElementById('model').value;
     const systemInstructions = document.getElementById('system-instructions').value.trim();
     const tools = JSON.parse(document.getElementById('tools').value.trim());
+    const voice = document.getElementById('voice').value;
+    const language = document.getElementById('language').value;
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -68,7 +70,10 @@ async function negotiate() {
         sdp: offer.sdp,
         system_instructions: systemInstructions,
         tools: tools,
+        voice: voice,
+        language: language,
     };
+
     requestBody = JSON.stringify(body);
     contentType = 'application/json';
 

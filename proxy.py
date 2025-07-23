@@ -89,13 +89,15 @@ async def create_connection(request):
     callback = body.get("callback")
     tools = body.get("tools")
     metadata = body.get("metadata")
+    voice = body.get("voice")
+    language = body.get("language")
     if not sdp:
         raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
 
     model = request.query.get("model")
 
     log_info(
-        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions} metadata: {metadata}"
+        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions} metadata: {metadata} voice: {voice} language: {language}"
     )
 
     # Create and start connection
@@ -108,7 +110,7 @@ async def create_connection(request):
     metrics.set_open_connections(len(connections))
 
     try:
-        sdp_response = await connection.start(sdp, model, system_instructions, tools)
+        sdp_response = await connection.start(sdp, model, system_instructions, tools, voice, language)
         return web.Response(
             content_type="application/json",
             body=json.dumps(

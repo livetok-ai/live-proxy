@@ -53,10 +53,12 @@ class Connection:
     def __init__(self, on_closed=None):
         self.on_closed = on_closed
 
-    async def start(self, sdp, model, system_instructions=None, tools=None):
+    async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None):
         """Start the RTC connection with the given parameters"""
         self.system_instructions = system_instructions
         self.tools = tools
+        self.voice = voice
+        self.language = language
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
 
@@ -291,7 +293,9 @@ class Connection:
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
 
-            async with connect_genai(model, self.system_instructions, self.tools, self.call_tool) as session:
+            async with connect_genai(
+                model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language
+            ) as session:
                 self.info("Connected to GenAI session")
                 self.genai_session = session
 

@@ -118,7 +118,7 @@ class Gemini(Model):
 
 @contextlib.asynccontextmanager
 async def connect_gemini(
-    model: str, system_instructions=None, tools=None, tool_callback=None
+    model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None
 ) -> AsyncGenerator[Gemini, None]:
     client = genai.Client(
         http_options=genai.types.HttpOptions(api_version="v1alpha"),
@@ -141,12 +141,24 @@ async def connect_gemini(
         else None
     )
 
+    # Build speech config if voice or language is specified
+    speech_config = None
+    if voice or language:
+        speech_config_dict = {}
+        if language:
+            speech_config_dict["language_code"] = language
+        if voice:
+            speech_config_dict["voice_config"] = {"prebuilt_voice_config": {"voice_name": voice}}
+        speech_config = genai.types.SpeechConfig(**speech_config_dict)
+    print(voice, language, speech_config)
+
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
         enable_affective_dialog=True if "native" in model else None,
         # proactivity=genai.types.ProactivityConfig(proactive_audio=True),
         system_instruction=system_instructions,
         tools=all_tools,
+        speech_config=speech_config,
         context_window_compression=(
             genai.types.ContextWindowCompressionConfig(
                 sliding_window=genai.types.SlidingWindow(),

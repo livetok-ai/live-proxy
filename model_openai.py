@@ -78,7 +78,7 @@ class OpenAI(Model):
 
 @contextlib.asynccontextmanager
 async def connect_openai(
-    model: str, system_instructions=None, tools=None, tool_callback=None
+    model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None
 ) -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
 
