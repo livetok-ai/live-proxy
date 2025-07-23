@@ -4,6 +4,7 @@ import re
 import time
 import uuid
 import numpy as np
+import aiohttp
 
 from aiortc import (
     MediaStreamTrack,
@@ -82,6 +83,37 @@ class Connection:
 
     def info(self, msg, *args):
         log_info(msg, *args, context=self.id)
+
+    async def call_tool(self, tool_name, tool_id, parameters):
+        """Make HTTP request to tool and return response"""
+        tool = next((t for t in self.tools if t["name"] == tool_name), None)
+        if not tool:
+            self.info(f"Tool call: {tool_name} not found")
+            return {"error": f"Tool {tool_name} not found"}
+
+        self.info(f"Tool call: {tool_name} found")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                data = {
+                    "parameters": parameters,
+                    "id": tool_id,
+                    "name": tool_name,
+                }
+                async with session.post(
+                    tool["url"],
+                    json=data,
+                    headers={"Content-Type": "application/json"},
+                ) as response:
+                    self.info(
+                        "Tool request sent to %s, status: %d",
+                        tool["url"],
+                        response.status,
+                    )
+                    return await response.json()
+        except Exception as e:
+            self.info(f"Error calling tool {tool_name}: {e}")
+            return {"error": str(e)}
 
     async def _run(self, model):
         self.info("Connection started")
@@ -258,7 +290,8 @@ class Connection:
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
-            async with connect_genai(model, self.system_instructions, self.tools) as session:
+
+            async with connect_genai(model, self.system_instructions, self.tools, self.call_tool) as session:
                 self.info("Connected to GenAI session")
                 self.genai_session = session
 

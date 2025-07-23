@@ -15,9 +15,10 @@ AUDIO_PTIME = 0.02
 
 
 class OpenAI(Model):
-    def __init__(self, session):
+    def __init__(self, session, tool_callback=None):
         super().__init__()
         self.session = session
+        self.tool_callback = tool_callback
         self.resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -76,7 +77,9 @@ class OpenAI(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_openai(model: str, system_instructions=None, tools=None) -> AsyncGenerator[OpenAI, None]:
+async def connect_openai(
+    model: str, system_instructions=None, tools=None, tool_callback=None
+) -> AsyncGenerator[OpenAI, None]:
     client = AsyncOpenAI()
 
     # Build the session config with optional system instructions
@@ -96,4 +99,4 @@ async def connect_openai(model: str, system_instructions=None, tools=None) -> As
         #     }
         # )
         # await conn.session.response.create()
-        yield OpenAI(conn)
+        yield OpenAI(conn, tool_callback)

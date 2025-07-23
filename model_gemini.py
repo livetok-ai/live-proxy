@@ -15,10 +15,11 @@ AUDIO_PTIME = 0.02
 
 
 class Gemini(Model):
-    def __init__(self, session, tools):
+    def __init__(self, session, tools, tool_callback=None):
         super().__init__()
         self.session = session
         self.tools = tools
+        self.tool_callback = tool_callback
         self.resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -46,52 +47,65 @@ class Gemini(Model):
             )
             await self.session.send(input=blob)
 
+    async def _handle_tool_call(self, event):
+        function_responses = []
+        for fc in event.tool_call.function_calls:
+            if self.tool_callback:
+                response = await self.tool_callback(fc.name, fc.id, fc.args)
+            else:
+                response = {"error": "No tool callback available"}
+
+            function_response = genai.types.FunctionResponse(
+                id=fc.id,
+                name=fc.name,
+                response=response,
+            )
+            function_responses.append(function_response)
+
+        await self.session.send_tool_response(function_responses=function_responses)
+
     async def recv(self) -> AsyncIterator[Output]:
         received = self.session.receive()
         async for event in received:
-            if event.data:
-                mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
-                sample_rate = int(mime_type.split("rate=")[1])
+            if event.server_content:
+                if event.data:
+                    mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
+                    sample_rate = int(mime_type.split("rate=")[1])
 
-                frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
-                frame.sample_rate = sample_rate
-                frame.planes[0].update(event.data)
+                    frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
+                    frame.sample_rate = sample_rate
+                    frame.planes[0].update(event.data)
 
-                yield frame
-            elif event.tool_call:
-                function_responses = []
-                log_info(f"Tool call: {event.tool_call}")
-                for fc in event.tool_call.function_calls:
-                    tool = next((t for t in self.tools if t["name"] == fc.name), None)
-                    if tool:
-                        log_info(f"Tool call: {fc} found: {tool}")
-                    else:
-                        log_info(f"Tool call: {fc} not found: {fc.name}")
+                    yield frame
+                if event.server_content.interrupted:
+                    # log_info(f"Interrupted: {event.server_content.interrupted}")
+                    self._emit(ModelEvents.INTERRUPTED)
 
-                    function_response = genai.types.FunctionResponse(
-                        name=fc.name, response={"result": "ok"}  # simple, hard-coded function response
+                if event.server_content.input_transcription:
+                    # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                    self._emit(
+                        ModelEvents.INPUT_TRANSCRIPTION,
+                        event.server_content.input_transcription.text,
                     )
-                    function_responses.append(function_response)
+                if event.server_content.output_transcription:
+                    # log_info(f"Output audio transcription: {event.server_content.output_transcription}")
+                    self._emit(
+                        ModelEvents.OUTPUT_TRANSCRIPTION,
+                        event.server_content.output_transcription.text,
+                    )
 
-                await self.session.send_tool_response(function_responses=function_responses)
-            else:
-                if event.server_content:
-                    if event.server_content.interrupted:
-                        # log_info(f"Interrupted: {event.server_content.interrupted}")
-                        self._emit(ModelEvents.INTERRUPTED)
-
-                    if event.server_content.input_transcription:
-                        # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
-                        self._emit(
-                            ModelEvents.INPUT_TRANSCRIPTION,
-                            event.server_content.input_transcription.text,
-                        )
-                    if event.server_content.output_transcription:
-                        # log_info(f"Output audio transcription: {event.server_content.output_transcription}")
-                        self._emit(
-                            ModelEvents.OUTPUT_TRANSCRIPTION,
-                            event.server_content.output_transcription.text,
-                        )
+            if event.tool_call:
+                try:
+                    await self._handle_tool_call(event)
+                except Exception as e:
+                    log_info(f"Error handling tool call: {e}")
+                    await self.session.send_tool_response(
+                        function_responses=[
+                            genai.types.FunctionResponse(
+                                id=event.tool_call.id, name=event.tool_call.name, response={"error": str(e)}
+                            )
+                        ]
+                    )
 
     async def close(self):
         log_info("Closing Gemini session")
@@ -103,7 +117,9 @@ class Gemini(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_gemini(model: str, system_instructions=None, tools=None) -> AsyncGenerator[Gemini, None]:
+async def connect_gemini(
+    model: str, system_instructions=None, tools=None, tool_callback=None
+) -> AsyncGenerator[Gemini, None]:
     client = genai.Client(
         http_options=genai.types.HttpOptions(api_version="v1alpha"),
     )
@@ -112,7 +128,11 @@ async def connect_gemini(model: str, system_instructions=None, tools=None) -> As
         [
             {
                 "function_declarations": [
-                    {"name": tool["name"], "description": tool["description"], "parameters": tool["parameters"]}
+                    {
+                        "name": tool["name"],
+                        "description": tool["description"],
+                        "parameters": tool["parameters"],
+                    }
                     for tool in tools
                 ]
             }
@@ -141,4 +161,4 @@ async def connect_gemini(model: str, system_instructions=None, tools=None) -> As
         config=config,
     ) as session:
         await session.send(input="Greet the user", end_of_turn=True)
-        yield Gemini(session, tools)
+        yield Gemini(session, tools, tool_callback)
