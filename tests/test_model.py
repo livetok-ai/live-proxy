@@ -1,8 +1,8 @@
 import unittest
-from unittest.mock import Mock, patch
 from typing import AsyncIterator
+from unittest.mock import patch
 
-from model import Model, ModelEvents, Input, Output
+from model import Input, Model, ModelEvents, Output
 
 
 class MockModel(Model):

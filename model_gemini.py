@@ -8,7 +8,7 @@ from PIL.Image import Image
 
 # from logger import log_info
 from logger import log_info
-from model import Input, Model, Output, ModelEvents
+from model import Input, Model, ModelEvents, Output
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02

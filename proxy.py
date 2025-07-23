@@ -1,19 +1,19 @@
 import argparse
 import asyncio
+import json
 import logging
 import ssl
 import sys
 import time
 from dataclasses import dataclass
 from typing import Optional
-import json
 
 import aiohttp
 from aiohttp import web
 
+import metrics
 from connection import Connection
 from logger import log_info
-import metrics
 
 
 def in_venv():
@@ -59,7 +59,7 @@ async def _make_callback(connection, duration, callback, metadata):
 
 
 async def create_connection(request):
-    log_info(f"HTTP create connection request")
+    log_info("HTTP create connection request")
 
     def on_connection_closed(connection):
         # Find and remove the connection info
@@ -118,7 +118,7 @@ async def create_connection(request):
                 }
             ),
         )
-    except Exception as e:
+    except Exception:
         connections.discard(conn_info)
         metrics.set_open_connections(len(connections))
         raise

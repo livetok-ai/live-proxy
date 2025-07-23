@@ -1,6 +1,6 @@
 from abc import abstractmethod
-from typing import AsyncIterator, Union, Callable, Any, Optional
 from collections import defaultdict
+from typing import Any, AsyncIterator, Callable, Optional, Union
 
 from av import AudioFrame
 from PIL.Image import Image

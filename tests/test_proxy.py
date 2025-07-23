@@ -1,8 +1,9 @@
 """Tests for the proxy module."""
 
-import pytest
 import asyncio
 from unittest.mock import AsyncMock
+
+import pytest
 
 
 class TestSendingTrack:

@@ -4,10 +4,10 @@ import io
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
-from logger import log_info
 from openai import AsyncOpenAI
 from PIL.Image import Image
 
+from logger import log_info
 from model import Input, Model, Output
 
 SAMPLE_RATE = 24000

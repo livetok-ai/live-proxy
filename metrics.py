@@ -1,6 +1,6 @@
 """Prometheus metrics for live-proxy."""
 
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
 
 # Metrics
 open_connections_gauge = Gauge("live_proxy_open_connections", "Number of currently open WebRTC connections")

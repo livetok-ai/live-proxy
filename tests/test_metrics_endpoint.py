@@ -1,10 +1,10 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import asyncio
+
 from aiohttp import web
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
-import proxy
+from aiohttp.test_utils import AioHTTPTestCase
+
 import metrics
+import proxy
 
 
 class TestMetricsEndpoint(AioHTTPTestCase):

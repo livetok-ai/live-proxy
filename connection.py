@@ -3,9 +3,9 @@ import fractions
 import re
 import time
 import uuid
-import numpy as np
-import aiohttp
 
+import aiohttp
+import numpy as np
 from aiortc import (
     MediaStreamTrack,
     RTCConfiguration,
