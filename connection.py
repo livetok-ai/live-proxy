@@ -259,7 +259,7 @@ class Connection:
             else:
                 self.transcript.append(
                     {
-                        "timestamp": time.time(),
+                        "timestamp": int(time.time() * 1000),
                         "role": role,
                         "content": content,
                     }
