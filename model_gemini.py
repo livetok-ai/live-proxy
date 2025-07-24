@@ -51,14 +51,16 @@ class Gemini(Model):
         function_responses = []
         for fc in event.tool_call.function_calls:
             if self.tool_callback:
-                response = await self.tool_callback(fc.name, fc.id, fc.args)
+                result = await self.tool_callback(fc.name, fc.id, fc.args)
             else:
-                response = {"error": "No tool callback available"}
+                result = {"error": "No tool callback available"}
 
             function_response = genai.types.FunctionResponse(
                 id=fc.id,
                 name=fc.name,
-                response=response,
+                response={
+                    "result": result,
+                },
             )
             function_responses.append(function_response)
 
@@ -102,8 +104,11 @@ class Gemini(Model):
                     await self.session.send_tool_response(
                         function_responses=[
                             genai.types.FunctionResponse(
-                                id=event.tool_call.id, name=event.tool_call.name, response={"error": str(e)}
+                                id=fc.id,
+                                name=fc.name,
+                                response={"result": {"error": str(e)}},
                             )
+                            for fc in event.tool_call.function_calls
                         ]
                     )
 
