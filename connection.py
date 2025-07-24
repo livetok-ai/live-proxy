@@ -4,7 +4,6 @@ import re
 import time
 import uuid
 
-import aiohttp
 import numpy as np
 from aiortc import (
     MediaStreamTrack,
@@ -37,7 +36,7 @@ class SendingTrack(MediaStreamTrack):
 
 
 class Connection:
-    def __init__(self, on_closed=None):
+    def __init__(self, closed=None, tool_call=None):
         self.id = str(uuid.uuid4())
         self.recv_audio_track = None
         self.recv_video_track = None
@@ -51,7 +50,8 @@ class Connection:
         self.transcript = []
         self.output_queue = asyncio.Queue()
         self.connected = False
-        self.on_closed = on_closed
+        self.closed = closed
+        self.tool_call = tool_call
 
     async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None):
         """Start the RTC connection with the given parameters"""
@@ -95,35 +95,11 @@ class Connection:
         await self.genai_session.send("Greet the user")
 
     async def call_tool(self, tool_name, tool_id, parameters):
-        """Make HTTP request to tool and return response"""
-        tool = next((t for t in self.tools if t["name"] == tool_name), None)
-        if not tool:
-            self.info(f"Tool call: {tool_name} not found")
-            return {"error": f"Tool {tool_name} not found"}
-
-        self.info(f"Tool call: {tool_name} found")
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                data = {
-                    "parameters": parameters,
-                    "id": tool_id,
-                    "name": tool_name,
-                }
-                async with session.post(
-                    tool["url"],
-                    json=data,
-                    headers={"Content-Type": "application/json"},
-                ) as response:
-                    self.info(
-                        "Tool request sent to %s, status: %d",
-                        tool["url"],
-                        response.status,
-                    )
-                    return await response.json()
-        except Exception as e:
-            self.info(f"Error calling tool {tool_name}: {e}")
-            return {"error": str(e)}
+        """Wrapper for tool calls that uses the provided tool_call func"""
+        if self.tool_call:
+            return await self.tool_call(self, tool_name, tool_id, parameters, self.tools)
+        else:
+            return {"error": "Tool calling not configured"}
 
     async def _run(self, model):
         self.info("Connection started")
@@ -335,8 +311,8 @@ class Connection:
             self.info("Error closing connection: %s", e)
 
         # Notify parent about connection closure
-        if self.on_closed:
-            self.on_closed(self)
+        if self.closed:
+            self.closed(self)
 
         self.info(f"Connection stopped. Transcript: {len(self.transcript)}.")
 

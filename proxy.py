@@ -33,7 +33,7 @@ class ConnectionInfo:
 connections = set()  # Set of ConnectionInfo objects
 
 
-async def _make_callback(connection, duration, callback, metadata):
+async def _closed_request(connection, duration, callback, metadata):
     try:
         async with aiohttp.ClientSession() as session:
             data = {
@@ -56,6 +56,42 @@ async def _make_callback(connection, duration, callback, metadata):
                 )
     except Exception as e:
         log_info("Failed to send callback to %s: %s", callback, e)
+
+
+async def _tool_call_request(connection, tool_name, tool_id, parameters, tools, metadata):
+    """Make HTTP request to tool and return response"""
+    tool = next((t for t in tools if t["name"] == tool_name), None)
+    if not tool:
+        log_info(f"Tool call: {tool_name} not found", context=connection.id)
+        return {"error": f"Tool {tool_name} not found"}
+
+    log_info(f"Tool call: {tool_name} found", context=connection.id)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            data = {
+                "parameters": parameters,
+                "id": tool_id,
+                "name": tool_name,
+                "connection_id": connection.id,
+                "timestamp": int(time.time() * 1000),
+                "metadata": metadata,
+            }
+            async with session.post(
+                tool["url"],
+                json=data,
+                headers={"Content-Type": "application/json"},
+            ) as response:
+                log_info(
+                    "Tool request sent to %s, status: %d",
+                    tool["url"],
+                    response.status,
+                    context=connection.id,
+                )
+                return await response.json()
+    except Exception as e:
+        log_info(f"Error calling tool {tool_name}: {e}", context=connection.id)
+        return {"error": str(e)}
 
 
 async def create_connection(request):
@@ -81,7 +117,7 @@ async def create_connection(request):
 
             # Make callback request if URL is provided
             if conn_info.callback:
-                asyncio.create_task(_make_callback(connection, duration, conn_info.callback, conn_info.metadata))
+                asyncio.create_task(_closed_request(connection, duration, conn_info.callback, conn_info.metadata))
 
     body = await request.json()
     sdp = body.get("sdp")
@@ -97,11 +133,15 @@ async def create_connection(request):
     model = request.query.get("model")
 
     log_info(
-        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions} metadata: {metadata} voice: {voice} language: {language}"
+        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions[:100]} metadata: {metadata} voice: {voice} language: {language}"
     )
 
+    # Create wrapper function that adds metadata to tool calls
+    async def tool_call_wrapper(connection, tool_name, tool_id, parameters, tools):
+        return await _tool_call_request(connection, tool_name, tool_id, parameters, tools, metadata)
+
     # Create and start connection
-    connection = Connection(on_closed=on_connection_closed)
+    connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper)
     conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
     connections.add(conn_info)
 
