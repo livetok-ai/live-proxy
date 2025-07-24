@@ -37,20 +37,20 @@ class SendingTrack(MediaStreamTrack):
 
 
 class Connection:
-    id = str(uuid.uuid4())
-    recv_audio_track = None
-    recv_video_track = None
-    send_track = None
-    pc = None
-    genai_session = None
-    system_instructions = None
-    timeout_task = None
-    last_message_time = None
-    start_time = None
-    transcript = []
-    output_queue = asyncio.Queue()
-
     def __init__(self, on_closed=None):
+        self.id = str(uuid.uuid4())
+        self.recv_audio_track = None
+        self.recv_video_track = None
+        self.send_track = None
+        self.pc = None
+        self.genai_session = None
+        self.system_instructions = None
+        self.timeout_task = None
+        self.last_message_time = None
+        self.start_time = None
+        self.transcript = []
+        self.output_queue = asyncio.Queue()
+        self.connected = False
         self.on_closed = on_closed
 
     async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None):
@@ -85,6 +85,14 @@ class Connection:
 
     def info(self, msg, *args):
         log_info(msg, *args, context=self.id)
+
+    async def on_established(self):
+        self.info("Connection established")
+
+        assert self.genai_session
+        assert self.connected
+
+        await self.genai_session.send("Greet the user")
 
     async def call_tool(self, tool_name, tool_id, parameters):
         """Make HTTP request to tool and return response"""
@@ -139,6 +147,12 @@ class Connection:
             self.info("Connection state is %s", self.pc.connectionState)
             if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
                 await self.close()
+
+            if not self.connected and self.pc.connectionState == "connected":
+                self.connected = True
+
+                if self.genai_session:
+                    await self.on_established()
 
         @self.pc.on("track")
         def on_track(track):
@@ -302,6 +316,9 @@ class Connection:
                 self.genai_session.on(ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription)
                 self.genai_session.on(ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription)
                 self.genai_session.on(ModelEvents.INTERRUPTED, on_interrupted)
+
+                if self.connected:
+                    await self.on_established()
 
                 # Start the genai receiver task
                 asyncio.ensure_future(run_recv_genai())

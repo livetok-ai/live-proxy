@@ -32,7 +32,7 @@ class OpenAI(Model):
                 item={
                     "type": "message",
                     "role": "user",
-                    "content": [{"type": "input_text", "text": "Say hello!"}],
+                    "content": [{"type": "input_text", "text": input}],
                 }
             )
             await self.session.response.create()

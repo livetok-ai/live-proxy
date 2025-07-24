@@ -155,7 +155,6 @@ async def connect_gemini(
         if voice:
             speech_config_dict["voice_config"] = {"prebuilt_voice_config": {"voice_name": voice}}
         speech_config = genai.types.SpeechConfig(**speech_config_dict)
-    print(voice, language, speech_config)
 
     config = genai.types.LiveConnectConfig(
         response_modalities=["AUDIO"],
@@ -177,5 +176,4 @@ async def connect_gemini(
         model="gemini-2.5-flash-preview-native-audio-dialog" if model == "gemini" else model,
         config=config,
     ) as session:
-        await session.send(input="Greet the user", end_of_turn=True)
         yield Gemini(session, tools, tool_callback)
