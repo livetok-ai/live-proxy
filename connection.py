@@ -10,6 +10,7 @@ from aiortc import (
     RTCConfiguration,
     RTCPeerConnection,
     RTCSessionDescription,
+    RTCIceServer,
 )
 from av import AudioFrame
 from PIL import Image
@@ -60,7 +61,15 @@ class Connection:
         self.voice = voice
         self.language = language
         offer = RTCSessionDescription(sdp=sdp, type="offer")
-        self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
+        self.pc = RTCPeerConnection(
+            RTCConfiguration(
+                iceServers=[
+                    RTCIceServer(
+                        urls="stun:stun.l.google.com:19302",
+                    )
+                ]
+            )
+        )
 
         self.last_message_time = time.time()
         self.start_time = time.time()
