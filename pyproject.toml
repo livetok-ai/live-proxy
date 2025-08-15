@@ -22,6 +22,7 @@ dependencies = [
     "aiortc",
     "aioquic",
     "aiohttp",
+    "aiohttp-cors",
     "websockets",
     "taskgroup",
     "numpy",

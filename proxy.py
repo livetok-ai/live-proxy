@@ -10,6 +10,7 @@ from typing import Optional
 
 import aiohttp
 from aiohttp import web
+from aiohttp_cors import setup as setup_cors, ResourceOptions
 
 import metrics
 from connection import Connection
@@ -231,9 +232,19 @@ if __name__ == "__main__":
 
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
-    app.router.add_post("/connection", create_connection)
-    app.router.add_delete("/connection/{connection_id}", delete_connection)
-    app.router.add_get("/metrics", metrics_endpoint)
+
+    # Setup CORS
+    cors = setup_cors(
+        app,
+        defaults={
+            "*": ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*", allow_methods="*")
+        },
+    )
+
+    # Add routes with CORS
+    cors.add(app.router.add_post("/connection", create_connection))
+    cors.add(app.router.add_delete("/connection/{connection_id}", delete_connection))
+    cors.add(app.router.add_get("/metrics", metrics_endpoint))
     app.router.add_static("/demo", "demo")
 
     asyncio.run(
