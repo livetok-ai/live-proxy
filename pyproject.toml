@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Real Time LLM Proxy for WebRTC audio/video streaming"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {file = "LICENSE"}
+license = "MIT"
 authors = [
     {name = "Live Proxy Team"}
 ]
@@ -46,6 +46,12 @@ dev = [
 
 [project.scripts]
 live-proxy = "proxy:main"
+
+[tool.setuptools]
+py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai"]
+
+[tool.setuptools.packages.find]
+exclude = ["demo*", "deploy*", "tests*", "venv*"]
 
 [tool.black]
 line-length = 120
