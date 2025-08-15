@@ -133,7 +133,7 @@ class Connection:
             if self.pc.connectionState == "failed" or self.pc.connectionState == "closed":
                 await self.close()
 
-            if not self.connected and self.pc.connectionState == "connected":
+            if not self.connected and self.pc and self.pc.connectionState == "connected":
                 self.connected = True
 
                 if self.genai_session:
