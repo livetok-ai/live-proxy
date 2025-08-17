@@ -10,7 +10,8 @@ from typing import Optional
 
 import aiohttp
 from aiohttp import web
-from aiohttp_cors import setup as setup_cors, ResourceOptions
+from aiohttp_cors import ResourceOptions
+from aiohttp_cors import setup as setup_cors
 
 import metrics
 from connection import Connection
@@ -32,6 +33,24 @@ class ConnectionInfo:
 
 
 connections = set()  # Set of ConnectionInfo objects
+
+
+def _parse_request_body(body):
+    """Parse and extract common parameters from request body."""
+    keys = ["sdp", "system_instructions", "callback", "tools", "metadata", "voice", "language", "model", "api_key"]
+    return {key: body.get(key) for key in keys}
+
+
+def _find_connection_by_id(connection_id):
+    """Find connection info by connection ID."""
+    if not connection_id:
+        raise web.HTTPBadRequest(text="Missing connection_id")
+
+    for info in connections:
+        if info.connection.id == connection_id:
+            return info
+
+    raise web.HTTPNotFound(text="Connection not found")
 
 
 async def _closed_request(connection, duration, callback, metadata):
@@ -121,29 +140,22 @@ async def create_connection(request):
                 asyncio.create_task(_closed_request(connection, duration, conn_info.callback, conn_info.metadata))
 
     body = await request.json()
-    sdp = body.get("sdp")
-    system_instructions = body.get("system_instructions")
-    callback = body.get("callback")
-    tools = body.get("tools")
-    metadata = body.get("metadata")
-    voice = body.get("voice")
-    language = body.get("language")
-    if not sdp:
+    params = _parse_request_body(body)
+
+    if not params["sdp"]:
         raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
 
-    model = request.query.get("model")
-
     log_info(
-        f"Creating connection model: {model} callback: {callback} instructions: {system_instructions[:100]} metadata: {metadata} voice: {voice} language: {language}"
+        f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']}"
     )
 
     # Create wrapper function that adds metadata to tool calls
     async def tool_call_wrapper(connection, tool_name, tool_id, parameters, tools):
-        return await _tool_call_request(connection, tool_name, tool_id, parameters, tools, metadata)
+        return await _tool_call_request(connection, tool_name, tool_id, parameters, tools, params["metadata"])
 
     # Create and start connection
     connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper)
-    conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
+    conn_info = ConnectionInfo(connection=connection, callback=params["callback"], metadata=params["metadata"])
     connections.add(conn_info)
 
     # Update metrics
@@ -151,7 +163,15 @@ async def create_connection(request):
     metrics.set_open_connections(len(connections))
 
     try:
-        sdp_response = await connection.start(sdp, model, system_instructions, tools, voice, language)
+        sdp_response = await connection.start(
+            params["sdp"],
+            params["model"],
+            params["system_instructions"],
+            params["tools"],
+            params["voice"],
+            params["language"],
+            params["api_key"],
+        )
         return web.Response(
             content_type="application/json",
             body=json.dumps(
@@ -172,17 +192,7 @@ async def delete_connection(request):
 
     log_info(f"HTTP delete connection request {connection_id}")
 
-    if not connection_id:
-        raise web.HTTPBadRequest(text="Missing connection_id")
-
-    conn_info = None
-    for info in connections:
-        if info.connection.id == connection_id:
-            conn_info = info
-            break
-
-    if not conn_info:
-        raise web.HTTPNotFound(text="Connection not found")
+    conn_info = _find_connection_by_id(connection_id)
 
     try:
         await conn_info.connection.close()
@@ -191,7 +201,24 @@ async def delete_connection(request):
         )
     except Exception as e:
         log_info(f"Error closing connection {connection_id}: {e}")
-        raise web.HTTPInternalServerError(text="Failed to close connection")
+        raise web.HTTPInternalServerError(text="Failed to close connection") from e
+
+
+async def update_connection(request):
+    connection_id = request.match_info.get("connection_id")
+
+    log_info(f"HTTP update connection request {connection_id}")
+
+    _find_connection_by_id(connection_id)  # Validate connection exists
+
+    try:
+        # await conn_info.connection.update()
+        return web.Response(
+            status=200, body=json.dumps({"message": "Connection updated successfully"}), content_type="application/json"
+        )
+    except Exception as e:
+        log_info(f"Error updating connection {connection_id}: {e}")
+        raise web.HTTPInternalServerError(text="Failed to update connection") from e
 
 
 async def metrics_endpoint(request):
@@ -244,6 +271,7 @@ if __name__ == "__main__":
     # Add routes with CORS
     cors.add(app.router.add_post("/connection", create_connection))
     cors.add(app.router.add_delete("/connection/{connection_id}", delete_connection))
+    cors.add(app.router.add_put("/connection/{connection_id}", update_connection))
     cors.add(app.router.add_get("/metrics", metrics_endpoint))
     app.router.add_static("/demo", "demo")
 

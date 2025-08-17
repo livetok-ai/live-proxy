@@ -8,9 +8,9 @@ import numpy as np
 from aiortc import (
     MediaStreamTrack,
     RTCConfiguration,
+    RTCIceServer,
     RTCPeerConnection,
     RTCSessionDescription,
-    RTCIceServer,
 )
 from av import AudioFrame
 from PIL import Image
@@ -54,12 +54,13 @@ class Connection:
         self.closed = closed
         self.tool_call = tool_call
 
-    async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None):
+    async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None):
         """Start the RTC connection with the given parameters"""
         self.system_instructions = system_instructions
         self.tools = tools
         self.voice = voice
         self.language = language
+        self.api_key = api_key
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         self.pc = RTCPeerConnection(
             RTCConfiguration(
@@ -293,7 +294,7 @@ class Connection:
             connect_genai = connect_openai if model == "openai" else connect_gemini
 
             async with connect_genai(
-                model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language
+                model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language, self.api_key
             ) as session:
                 self.info("Connected to GenAI session")
                 self.genai_session = session

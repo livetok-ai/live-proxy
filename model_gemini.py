@@ -123,9 +123,10 @@ class Gemini(Model):
 
 @contextlib.asynccontextmanager
 async def connect_gemini(
-    model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None
+    model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
 ) -> AsyncGenerator[Gemini, None]:
     client = genai.Client(
+        api_key=api_key,
         http_options=genai.types.HttpOptions(api_version="v1alpha"),
     )
 

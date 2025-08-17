@@ -76,6 +76,7 @@ async function negotiate() {
     tools: tools,
     voice: voice,
     language: language,
+    model: model,
     metadata: {
       agent_id: '123',
       session_id: '456',
@@ -87,7 +88,7 @@ async function negotiate() {
   requestBody = JSON.stringify(body);
   contentType = 'application/json';
 
-  const response = await fetch(`${BASE_URL}/connection?model=${model}`, {
+  const response = await fetch(`${BASE_URL}/connection`, {
     body: requestBody,
     headers: {
       'Content-Type': contentType
