@@ -167,10 +167,14 @@ class Connection:
                 self.info("Track %s ended", track.kind)
 
         async def run_recv_audio_track():
+            start_time = time.time()
             while True:
                 try:
                     frame = await self.recv_audio_track.recv()
                     self.last_message_time = time.time()
+                    # Ignore first 5 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
+                    if time.time() - start_time < 5:
+                        continue
                     if not self.genai_session:
                         continue
                     await self.genai_session.send(frame)
