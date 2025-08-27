@@ -96,6 +96,17 @@ class Gemini(Model):
                         event.server_content.output_transcription.text,
                     )
 
+            if event.usage_metadata:
+                log_info(
+                    f"Usage metadata: "
+                    f"prompt_token_count={event.usage_metadata.prompt_token_count} "
+                    f"cached_content_token_count={event.usage_metadata.cached_content_token_count} "
+                    f"response_token_count={event.usage_metadata.response_token_count} "
+                    f"tool_use_prompt_token_count={event.usage_metadata.tool_use_prompt_token_count} "
+                    f"thoughts_token_count={event.usage_metadata.thoughts_token_count} "
+                    f"total_token_count={event.usage_metadata.total_token_count}"
+                )
+
             if event.tool_call:
                 try:
                     await self._handle_tool_call(event)

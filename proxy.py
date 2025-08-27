@@ -125,7 +125,7 @@ async def create_connection(request):
                 conn_info = info
                 break
 
-        log_info(f"Connection closed: {conn_info}")
+        log_info(f"Connection closed: {conn_info.metadata if conn_info.metadata else 'Unknown'}")
 
         if conn_info:
             connections.discard(conn_info)
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     logging.getLogger("aioice").setLevel(level=logging.WARN)
 
     if args.cert_file:
-        ssl_context = ssl.SSLContext()
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(args.cert_file, args.key_file)
     else:
         ssl_context = None

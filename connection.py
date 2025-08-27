@@ -274,13 +274,14 @@ class Connection:
                         "content": content,
                     }
                 )
+                # Log full transcript when new item is added
+                if len(self.transcript) > 1:
+                    self.info(f"Transcript updated. {self.transcript[-1]['role']} -> {self.transcript[-1]['content']}")
 
         def on_input_transcription(input_transcription):
-            self.info(f"Input transcription: {input_transcription}")
             add_transcript("user", input_transcription)
 
         def on_output_transcription(output_transcription):
-            self.info(f"Output transcription: {output_transcription}")
             add_transcript("model", output_transcription)
 
         def on_interrupted(event=None):
