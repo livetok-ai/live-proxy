@@ -63,6 +63,7 @@ async function negotiate() {
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
   const language = document.getElementById('language').value;
+  const apiKey = document.getElementById('api-key').value.trim();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
@@ -84,6 +85,11 @@ async function negotiate() {
       from: '101',
     },
   };
+
+  // Add API key if provided
+  if (apiKey) {
+    body.api_key = apiKey;
+  }
 
   requestBody = JSON.stringify(body);
   contentType = 'application/json';
