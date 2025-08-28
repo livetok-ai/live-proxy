@@ -94,15 +94,35 @@ async function negotiate() {
   requestBody = JSON.stringify(body);
   contentType = 'application/json';
 
-  const response = await fetch(`${BASE_URL}/connection`, {
-    body: requestBody,
-    headers: {
-      'Content-Type': contentType
-    },
-    method: 'POST'
-  });
+  let response;
+  let result;
 
-  const result = await response.json();
+  try {
+    response = await fetch(`${BASE_URL}/connection`, {
+      body: requestBody,
+      headers: {
+        'Content-Type': contentType
+      },
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    result = await response.json();
+  } catch (error) {
+    console.error('Connection error:', error);
+
+    // Show error popup with instructions
+    const errorMessage = `Connection failed: ${error.message}\n\n` +
+      `Please check the following:\n` +
+      `• Make sure you have entered a valid API key\n` +
+      `• Check your network connection`;
+
+    alert(errorMessage);
+    window.location.reload();
+  }
   const answer = new RTCSessionDescription({
     type: 'answer',
     sdp: result.sdp,
