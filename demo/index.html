@@ -1,193 +1,320 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC demo</title>
-  <style>
-    button {
-      padding: 8px 16px;
+  <title>Live-Proxy WebRTC Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3b82f6',
+            secondary: '#1f2937',
+          }
+        }
+      }
     }
-
-    pre {
-      overflow-x: hidden;
-      overflow-y: auto;
-    }
-
-    .option {
-      margin-bottom: 8px;
-    }
-
-    #media {
-      max-width: 1280px;
-    }
-  </style>
+  </script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 
-<body>
+<body class="bg-gray-50 min-h-screen">
 
-  <h2>Options</h2>
-  <div class="option">
-    <label for="model">Model</label>
-    <select id="model">
-      <option value="gemini-2.5-flash-preview-native-audio-dialog">
-        gemini-2.5-flash-preview-native-audio-dialog</option>
-      <option value="gemini-2.5-flash-exp-native-audio-thinking-dialog">
-        gemini-2.5-flash-exp-native-audio-thinking-dialog</option>
-      <option value="gemini-live-2.5-flash-preview" selected>gemini-live-2.5-flash-preview</option>
-      <option value="gemini-2.0-flash-live-001">gemini-2.0-flash-live-001</option>
-      <!-- <option value="openai">GPT-4o</option> -->
-    </select>
+  <!-- Header -->
+  <div class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center py-6">
+        <div class="flex items-center space-x-3">
+          <div class="bg-primary p-2 rounded-lg">
+            <i class="fas fa-broadcast-tower text-white text-xl"></i>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Live-Proxy Demo</h1>
+            <p class="text-gray-600 text-sm">Real-time WebRTC LLM Communication</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center space-x-2">
+            <div class="w-3 h-3 rounded-full" id="status-indicator"></div>
+            <span class="text-sm font-medium text-gray-700" id="ice-connection-state">Disconnected</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="option">
-    <input id="use-audio" checked="checked" type="checkbox" />
-    <label for="use-audio">Use audio</label>
-    <select id="audio-input">
-      <option value="" selected>Default device</option>
-    </select>
-  </div>
-  <div class="option">
-    <input id="use-video" type="checkbox" />
-    <label for="use-video">Use video</label>
-    <select id="video-input">
-      <option value="" selected>Default device</option>
-    </select>
-  </div>
-  <div class="option">
-    <label for="voice">Voice</label>
-    <select id="voice">
-      <option value="">Default</option>
-      <option value="Puck">Puck</option>
-      <option value="Charon">Charon</option>
-      <option value="Kore">Kore</option>
-      <option value="Fenrir">Fenrir</option>
-      <option value="Aoede">Aoede</option>
-      <option value="Leda">Leda</option>
-      <option value="Orus">Orus</option>
-      <option value="Zephyr">Zephyr</option>
-    </select>
-  </div>
-  <div class="option">
-    <label for="language">Language</label>
-    <select id="language">
-      <option value="" selected>Default</option>
-      <option value="en-US">English (US)</option>
-      <option value="en-GB">English (UK)</option>
-      <option value="es-ES">Spanish (Spain)</option>
-      <option value="es-US">Spanish (US)</option>
-      <option value="fr-FR">French</option>
-      <option value="de-DE">German</option>
-      <option value="it-IT">Italian</option>
-      <option value="pt-BR">Portuguese (Brazil)</option>
-      <option value="ja-JP">Japanese</option>
-      <option value="ko-KR">Korean</option>
-      <option value="zh-CN">Chinese (Simplified)</option>
-      <option value="zh-TW">Chinese (Traditional)</option>
-    </select>
-  </div>
-  <div class="option">
-    <label for="api-key">API Key</label><br>
-    <input type="password" id="api-key" placeholder="Enter your API key here" style="width: 300px;">
-  </div>
-  <div class="option">
-    <label for="system-instructions">System Instructions</label><br>
-    <textarea id="system-instructions" rows="20" cols="120">
-You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively. Use the following guidelines:
 
-- Use natural filler words like “hmm,” “mhm,” “right,” “uh,” and “just.” Don’t overdo it. Use “uh” only when expressing hesitation or uncertainty.
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- Configuration Panel -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Model Configuration -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <div class="flex items-center space-x-3 mb-6">
+            <i class="fas fa-cog text-primary text-lg"></i>
+            <h2 class="text-xl font-semibold text-gray-900">Model Configuration</h2>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="model" class="block text-sm font-medium text-gray-700 mb-2">AI Model</label>
+              <select id="model" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="gemini-2.5-flash-preview-native-audio-dialog">Gemini 2.5 Flash Preview (Audio Dialog)</option>
+                <option value="gemini-2.5-flash-exp-native-audio-thinking-dialog">Gemini 2.5 Flash Exp (Thinking Dialog)</option>
+                <option value="gemini-live-2.5-flash-preview" selected>Gemini Live 2.5 Flash Preview</option>
+                <option value="gemini-2.0-flash-live-001">Gemini 2.0 Flash Live</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="voice" class="block text-sm font-medium text-gray-700 mb-2">Voice</label>
+              <select id="voice" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">Default</option>
+                <option value="Puck">Puck</option>
+                <option value="Charon">Charon</option>
+                <option value="Kore">Kore</option>
+                <option value="Fenrir">Fenrir</option>
+                <option value="Aoede">Aoede</option>
+                <option value="Leda">Leda</option>
+                <option value="Orus">Orus</option>
+                <option value="Zephyr">Zephyr</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="language" class="block text-sm font-medium text-gray-700 mb-2">Language</label>
+              <select id="language" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="" selected>Default</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish (Spain)</option>
+                <option value="es-US">Spanish (US)</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="it-IT">Italian</option>
+                <option value="pt-BR">Portuguese (Brazil)</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="ko-KR">Korean</option>
+                <option value="zh-CN">Chinese (Simplified)</option>
+                <option value="zh-TW">Chinese (Traditional)</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="api-key" class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+              <input type="password" id="api-key" placeholder="Enter your API key" 
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Configuration -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <div class="flex items-center space-x-3 mb-6">
+            <i class="fas fa-microphone text-primary text-lg"></i>
+            <h2 class="text-xl font-semibold text-gray-900">Media Configuration</h2>
+          </div>
+          
+          <div class="space-y-4">
+            <div class="flex items-center space-x-4">
+              <div class="flex items-center">
+                <input id="use-audio" checked="checked" type="checkbox" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                <label for="use-audio" class="ml-2 text-sm font-medium text-gray-700">Enable Audio</label>
+              </div>
+              <select id="audio-input" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="" selected>Default audio device</option>
+              </select>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+              <div class="flex items-center">
+                <input id="use-video" type="checkbox" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                <label for="use-video" class="ml-2 text-sm font-medium text-gray-700">Enable Video</label>
+              </div>
+              <select id="video-input" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="" selected>Default video device</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Instructions -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <div class="flex items-center space-x-3 mb-6">
+            <i class="fas fa-file-alt text-primary text-lg"></i>
+            <h2 class="text-xl font-semibold text-gray-900">System Instructions</h2>
+          </div>
+          <textarea id="system-instructions" rows="12" 
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
+            placeholder="Enter system instructions for the AI assistant...">You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively. Use the following guidelines:
+
+- Use natural filler words like "hmm," "mhm," "right," "uh," and "just." Don't overdo it. Use "uh" only when expressing hesitation or uncertainty.
 - Insert brief pauses mid-sentence and between thoughts. The silence might feel awkward, but it makes speech more lifelike.
 - Occasionally self-correct or rephrase, as real people do. For example:  
-    “It looks like that item is... actually, we’ll have it next week.”
+    "It looks like that item is... actually, we'll have it next week."
 - Speak at a moderate pace with some natural variation. Speed up a little when you're confident, slow down slightly when thinking.
 - Drop in incomplete sentences or fragments when it sounds more human:  
-    “Sure, no problem.”  
-    “Next Tuesday... sounds good?”
+    "Sure, no problem."  
+    "Next Tuesday... sounds good?"
 - Acknowledge the user with casual affirmations like:  
-    “Ah-huh,” “That’s right,” “Yeah,” “Gotcha,” “Perfect,” “Absolutely.”
-- Keep explanations brief, clear, and easy to understand. Don’t sound scripted or robotic.
+    "Ah-huh," "That's right," "Yeah," "Gotcha," "Perfect," "Absolutely."
+- Keep explanations brief, clear, and easy to understand. Don't sound scripted or robotic.
 - Output in plain text only. Avoid hyphens. Use commas frequently to create a natural rhythm.
 - Read phone numbers as separate digits like six, one, two, five, seven, eight and not as a whole number like six hundred and eighty four million three hundred and thirty two thousand three hundred and twenty one.  When reading a phone number, don't read the country code, just the number (skip international preffix like +34, +1 ...).
 
-Remember, you're not reading from a script. You're just... talking.
-        </textarea>
-  </div>
+Remember, you're not reading from a script. You're just... talking.</textarea>
+        </div>
 
-  <div class="option">
-    <label for="tools">Tools</label><br>
-    <textarea id="tools" rows="10" cols="120">
-            [
-                {
-                    "name": "find_appointment",
-                    "description": "Use this tool to find an existing appointment from a customer and get the details of the appointment (date, time, service and appointment id)",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "phone_number": {
-                                "type": "STRING",
-                                "description": "The phone number of the customer"
-                            }
-                        }
-                    },
-                    "response": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "appointment": {
-                                "type": "OBJECT",
-                                "description": "The appointment details if found"
-                            }
-                        }
-                    },
-                    "url": "http://localhost:3000/api/live-proxy/tools"
-                },
-                {
-                    "name": "book_appointment",
-                    "description": "Use this tool to book an appointment",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "phone_number": {
-                                "type": "STRING",
-                                "description": "The phone number of the customer"
-                            },
-                            "date": {
-                                "type": "STRING",
-                                "description": "The date of the appointment"
-                            },
-                            "time": {
-                                "type": "STRING",
-                                "description": "The time of the appointment"
-                            },
-                            "service": {
-                                "type": "STRING",
-                                "description": "The service of the appointment"
-                            }
-                        }
-                    },
-                    "url": "http://localhost:3000/api/live-proxy/tools"
+        <!-- Tools Configuration -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <div class="flex items-center space-x-3 mb-6">
+            <i class="fas fa-tools text-primary text-lg"></i>
+            <h2 class="text-xl font-semibold text-gray-900">Tools Configuration</h2>
+          </div>
+          <textarea id="tools" rows="8" 
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
+            placeholder="Enter tools configuration in JSON format...">[
+    {
+        "name": "find_appointment",
+        "description": "Use this tool to find an existing appointment from a customer and get the details of the appointment (date, time, service and appointment id)",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "phone_number": {
+                    "type": "STRING",
+                    "description": "The phone number of the customer"
                 }
-            ]
-        </textarea>
+            }
+        },
+        "response": {
+            "type": "OBJECT",
+            "properties": {
+                "appointment": {
+                    "type": "OBJECT",
+                    "description": "The appointment details if found"
+                }
+            }
+        },
+        "url": "http://localhost:3000/api/live-proxy/tools"
+    },
+    {
+        "name": "book_appointment",
+        "description": "Use this tool to book an appointment",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "phone_number": {
+                    "type": "STRING",
+                    "description": "The phone number of the customer"
+                },
+                "date": {
+                    "type": "STRING",
+                    "description": "The date of the appointment"
+                },
+                "time": {
+                    "type": "STRING",
+                    "description": "The time of the appointment"
+                },
+                "service": {
+                    "type": "STRING",
+                    "description": "The service of the appointment"
+                }
+            }
+        },
+        "url": "http://localhost:3000/api/live-proxy/tools"
+    }
+]</textarea>
+        </div>
+      </div>
+
+      <!-- Control Panel & Media -->
+      <div class="space-y-6">
+        <!-- Connection Control -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <h2 class="text-xl font-semibold text-gray-900 mb-6">Connection Control</h2>
+          <div class="space-y-4">
+            <button id="start" onclick="start().catch(alert)" 
+              class="w-full bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
+              <i class="fas fa-play"></i>
+              <span>Start Session</span>
+            </button>
+            <button id="stop" onclick="stop().catch(alert)" style="display: none"
+              class="w-full bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center space-x-2">
+              <i class="fas fa-stop"></i>
+              <span>Stop Session</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Media Display -->
+        <div id="media" class="bg-white rounded-xl shadow-sm border p-6" style="display: none">
+          <h2 class="text-xl font-semibold text-gray-900 mb-6 flex items-center space-x-2">
+            <i class="fas fa-video"></i>
+            <span>Media Stream</span>
+          </h2>
+          <div class="space-y-4">
+            <audio id="audio" autoplay="true" class="w-full"></audio>
+            <video id="video" autoplay="true" playsinline="true" muted="true" 
+              class="w-full rounded-lg bg-gray-900"></video>
+          </div>
+        </div>
+
+        <!-- Data Channel -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+          <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+            <i class="fas fa-comments"></i>
+            <span>Conversation Log</span>
+          </h2>
+          <pre id="data-channel" class="bg-gray-50 p-4 rounded-lg text-sm font-mono h-64 overflow-y-auto border text-gray-700"></pre>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <script>
+    // Update status indicator based on connection state
+    const updateStatusIndicator = (state) => {
+      const indicator = document.getElementById('status-indicator');
+      const stateText = document.getElementById('ice-connection-state');
+      
+      indicator.className = 'w-3 h-3 rounded-full ';
+      
+      switch(state.toLowerCase()) {
+        case 'connected':
+          indicator.className += 'bg-green-500';
+          break;
+        case 'connecting':
+          indicator.className += 'bg-yellow-500 animate-pulse';
+          break;
+        case 'failed':
+        case 'disconnected':
+          indicator.className += 'bg-red-500';
+          break;
+        default:
+          indicator.className += 'bg-gray-400';
+      }
+    };
 
-  <button id="start" onclick="start().catch(alert)">Start</button>
-  <button id="stop" style="display: none" onclick="stop().catch(alert)">Stop</button>
+    // Watch for connection state changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList' || mutation.type === 'characterData') {
+          updateStatusIndicator(mutation.target.textContent || 'disconnected');
+        }
+      });
+    });
 
-  <h2>State</h2>
-  <p>
-    Connection state: <span id="ice-connection-state"></span>
-  </p>
+    observer.observe(document.getElementById('ice-connection-state'), {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
 
-  <div id="media" style="display: none">
-    <h2>Media</h2>
-
-    <audio id="audio" autoplay="true"></audio>
-    <video id="video" autoplay="true" playsinline="true" muted="true"></video>
-  </div>
-
-  <h2>Data channel</h2>
-  <pre id="data-channel" style="height: 200px;"></pre>
+    // Initial status
+    updateStatusIndicator('disconnected');
+  </script>
 
   <script src="client.js"></script>
 </body>
