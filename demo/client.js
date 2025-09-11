@@ -64,6 +64,7 @@ async function negotiate() {
   const voice = document.getElementById('voice').value;
   const language = document.getElementById('language').value;
   const apiKey = document.getElementById('api-key').value.trim();
+  const ragCorpus = document.getElementById('rag-corpus').value.trim();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
@@ -89,6 +90,11 @@ async function negotiate() {
   // Add API key if provided
   if (apiKey) {
     body.api_key = apiKey;
+  }
+
+  // Add RAG corpus if provided
+  if (ragCorpus) {
+    body.rag_corpus = ragCorpus;
   }
 
   requestBody = JSON.stringify(body);

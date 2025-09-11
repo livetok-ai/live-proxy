@@ -32,8 +32,10 @@
             <i class="fas fa-broadcast-tower text-white text-xl"></i>
           </div>
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Live-Proxy Demo</h1>
-            <p class="text-gray-600 text-sm">Real-time WebRTC LLM Communication</p>
+            <h1 class="text-2xl font-bold text-gray-900">Gemini Real-Time API Demo</h1>
+            <p class="text-gray-600 text-sm">Real-time API for Gemini. <a href="https://labs.livetok.io/real-time-api"
+                target="_blank" class="text-primary hover:text-blue-700 underline">More information and documentation
+                here</a>.</p>
           </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -56,13 +58,16 @@
             <i class="fas fa-cog text-primary text-lg"></i>
             <h2 class="text-xl font-semibold text-gray-900">Model Configuration</h2>
           </div>
-          
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label for="model" class="block text-sm font-medium text-gray-700 mb-2">AI Model</label>
-              <select id="model" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                <option value="gemini-2.5-flash-preview-native-audio-dialog">Gemini 2.5 Flash Preview (Audio Dialog)</option>
-                <option value="gemini-2.5-flash-exp-native-audio-thinking-dialog">Gemini 2.5 Flash Exp (Thinking Dialog)</option>
+              <select id="model"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="gemini-2.5-flash-preview-native-audio-dialog">Gemini 2.5 Flash Preview (Audio Dialog)
+                </option>
+                <option value="gemini-2.5-flash-exp-native-audio-thinking-dialog">Gemini 2.5 Flash Exp (Thinking Dialog)
+                </option>
                 <option value="gemini-live-2.5-flash-preview" selected>Gemini Live 2.5 Flash Preview</option>
                 <option value="gemini-2.0-flash-live-001">Gemini 2.0 Flash Live</option>
               </select>
@@ -70,7 +75,8 @@
 
             <div>
               <label for="voice" class="block text-sm font-medium text-gray-700 mb-2">Voice</label>
-              <select id="voice" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+              <select id="voice"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="">Default</option>
                 <option value="Puck">Puck</option>
                 <option value="Charon">Charon</option>
@@ -85,7 +91,8 @@
 
             <div>
               <label for="language" class="block text-sm font-medium text-gray-700 mb-2">Language</label>
-              <select id="language" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+              <select id="language"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="" selected>Default</option>
                 <option value="en-US">English (US)</option>
                 <option value="en-GB">English (UK)</option>
@@ -104,11 +111,22 @@
 
             <div>
               <label for="api-key" class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
-              <input type="password" id="api-key" placeholder="Enter your API key" 
+              <input type="password" id="api-key" placeholder="Enter your API key"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
               <p class="text-xs text-gray-500 mt-1">
                 <i class="fas fa-info-circle mr-1"></i>
-                Get a free API key from <a href="https://aistudio.google.com/" target="_blank" class="text-primary hover:text-blue-700 underline">AI Google Studio</a>
+                Get a free API key from <a href="https://aistudio.google.com/" target="_blank"
+                  class="text-primary hover:text-blue-700 underline">AI Google Studio</a>
+              </p>
+            </div>
+
+            <div class="md:col-span-2">
+              <label for="rag-corpus" class="block text-sm font-medium text-gray-700 mb-2">RAG Corpus ID</label>
+              <input type="text" id="rag-corpus" placeholder="Enter RAG corpus ID (optional)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+              <p class="text-xs text-gray-500 mt-1">
+                <i class="fas fa-info-circle mr-1"></i>
+                Optional: ID of the RAG corpus to use for enhanced responses (Only with Enterprise Plan)
               </p>
             </div>
           </div>
@@ -120,24 +138,28 @@
             <i class="fas fa-microphone text-primary text-lg"></i>
             <h2 class="text-xl font-semibold text-gray-900">Media Configuration</h2>
           </div>
-          
+
           <div class="space-y-4">
             <div class="flex items-center space-x-4">
               <div class="flex items-center">
-                <input id="use-audio" checked="checked" type="checkbox" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                <input id="use-audio" checked="checked" type="checkbox"
+                  class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                 <label for="use-audio" class="ml-2 text-sm font-medium text-gray-700">Enable Audio</label>
               </div>
-              <select id="audio-input" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+              <select id="audio-input"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="" selected>Default audio device</option>
               </select>
             </div>
-            
+
             <div class="flex items-center space-x-4">
               <div class="flex items-center">
-                <input id="use-video" type="checkbox" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                <input id="use-video" type="checkbox"
+                  class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                 <label for="use-video" class="ml-2 text-sm font-medium text-gray-700">Enable Video</label>
               </div>
-              <select id="video-input" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+              <select id="video-input"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="" selected>Default video device</option>
               </select>
             </div>
@@ -150,7 +172,7 @@
             <i class="fas fa-file-alt text-primary text-lg"></i>
             <h2 class="text-xl font-semibold text-gray-900">System Instructions</h2>
           </div>
-          <textarea id="system-instructions" rows="12" 
+          <textarea id="system-instructions" rows="12"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
             placeholder="Enter system instructions for the AI assistant...">You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively. Use the following guidelines:
 
@@ -177,7 +199,7 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
             <i class="fas fa-tools text-primary text-lg"></i>
             <h2 class="text-xl font-semibold text-gray-900">Tools Configuration</h2>
           </div>
-          <textarea id="tools" rows="8" 
+          <textarea id="tools" rows="8"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
             placeholder="Enter tools configuration in JSON format...">[
     {
@@ -239,7 +261,7 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
         <div class="bg-white rounded-xl shadow-sm border p-6">
           <h2 class="text-xl font-semibold text-gray-900 mb-6">Connection Control</h2>
           <div class="space-y-4">
-            <button id="start" onclick="start().catch(alert)" 
+            <button id="start" onclick="start().catch(alert)"
               class="w-full bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
               <i class="fas fa-play"></i>
               <span>Start Session</span>
@@ -260,7 +282,7 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
           </h2>
           <div class="space-y-4">
             <audio id="audio" autoplay="true" class="w-full"></audio>
-            <video id="video" autoplay="true" playsinline="true" muted="true" 
+            <video id="video" autoplay="true" playsinline="true" muted="true"
               class="w-full rounded-lg bg-gray-900"></video>
           </div>
         </div>
@@ -271,7 +293,8 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
             <i class="fas fa-comments"></i>
             <span>Conversation Log</span>
           </h2>
-          <pre id="data-channel" class="bg-gray-50 p-4 rounded-lg text-sm font-mono h-64 overflow-y-auto border text-gray-700"></pre>
+          <pre id="data-channel"
+            class="bg-gray-50 p-4 rounded-lg text-sm font-mono h-64 overflow-y-auto border text-gray-700"></pre>
         </div>
       </div>
     </div>
@@ -282,10 +305,10 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
     const updateStatusIndicator = (state) => {
       const indicator = document.getElementById('status-indicator');
       const stateText = document.getElementById('ice-connection-state');
-      
+
       indicator.className = 'w-3 h-3 rounded-full ';
-      
-      switch(state.toLowerCase()) {
+
+      switch (state.toLowerCase()) {
         case 'connected':
           indicator.className += 'bg-green-500';
           break;
