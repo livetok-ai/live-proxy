@@ -1,5 +1,6 @@
 import asyncio
 import fractions
+import json
 import re
 import time
 import uuid
@@ -53,6 +54,7 @@ class Connection:
         self.connected = False
         self.closed = closed
         self.tool_call = tool_call
+        self.data_channel = None
 
     async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None):
         """Start the RTC connection with the given parameters"""
@@ -119,6 +121,8 @@ class Connection:
 
         @self.pc.on("datachannel")
         def on_datachannel(channel):
+            self.data_channel = channel
+
             @channel.on("message")
             async def on_message(message):
                 self.last_message_time = time.time()
@@ -284,9 +288,15 @@ class Connection:
 
         def on_input_transcription(input_transcription):
             add_transcript("user", input_transcription)
+            if self.data_channel and self.data_channel.readyState == "open":
+                message = json.dumps({"type": "transcription", "role": "user", "content": input_transcription})
+                self.data_channel.send(message)
 
         def on_output_transcription(output_transcription):
             add_transcript("model", output_transcription)
+            if self.data_channel and self.data_channel.readyState == "open":
+                message = json.dumps({"type": "transcription", "role": "model", "content": output_transcription})
+                self.data_channel.send(message)
 
         def on_interrupted(event=None):
             self.info(f"Received INTERRUPTED event, clearing output queue {self.output_queue.qsize()}")

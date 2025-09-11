@@ -4,10 +4,60 @@ const dataChannelLog = document.getElementById('data-channel'),
 
 var pc = null;
 var dc = null;
+var lastMessageElement = null; // Track the last message bubble element
+var isAppendingToLast = false; // Track if we're appending to the last message
 
 // Read from query params
 const urlParams = new URLSearchParams(window.location.search);
 const BASE_URL = urlParams.get('base_url') || '';
+
+// Function to add or append message to chat bubbles
+function addOrAppendMessage(messageType, content) {
+  const isUser = messageType === 'user';
+  const lastWasSameType = lastMessageElement && lastMessageElement.dataset.role === messageType;
+  
+  if (lastWasSameType) {
+    // Append to existing message bubble
+    const messageText = lastMessageElement.querySelector('.message-text');
+    messageText.textContent += content;
+  } else {
+    // Create new message bubble
+    const messageDiv = document.createElement('div');
+    messageDiv.dataset.role = messageType;
+    
+    if (isUser) {
+      messageDiv.className = 'flex justify-end';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-primary text-white break-words word-wrap';
+      const textDiv = document.createElement('div');
+      textDiv.className = 'text-sm';
+      const textSpan = document.createElement('span');
+      textSpan.className = 'message-text';
+      textSpan.textContent = content;
+      textDiv.appendChild(textSpan);
+      bubble.appendChild(textDiv);
+      messageDiv.appendChild(bubble);
+    } else {
+      messageDiv.className = 'flex justify-start';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-white border shadow-sm break-words word-wrap';
+      const textDiv = document.createElement('div');
+      textDiv.className = 'text-sm text-gray-800';
+      const textSpan = document.createElement('span');
+      textSpan.className = 'message-text';
+      textSpan.textContent = content;
+      textDiv.appendChild(textSpan);
+      bubble.appendChild(textDiv);
+      messageDiv.appendChild(bubble);
+    }
+    
+    dataChannelLog.appendChild(messageDiv);
+    lastMessageElement = messageDiv;
+  }
+  
+  // Auto-scroll to bottom
+  dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
+}
 
 function createPeerConnection() {
   var config = {
@@ -138,18 +188,47 @@ async function negotiate() {
 
 async function start() {
   document.getElementById('start').style.display = 'none';
+  
+  // Reset transcription tracking and clear log
+  lastMessageElement = null;
+  isAppendingToLast = false;
+  dataChannelLog.innerHTML = '';
 
   pc = createPeerConnection();
 
   dc = pc.createDataChannel('data', { ordered: true });
   dc.addEventListener('close', () => {
-    dataChannelLog.textContent += '- close\n';
+    // Data channel closed - no need to show this to user
   });
   dc.addEventListener('open', () => {
-    dataChannelLog.textContent += '- open\n';
+    // Data channel opened - no need to show this to user
   });
   dc.addEventListener('message', (evt) => {
-    dataChannelLog.textContent += '< ' + evt.data + '\n';
+    const message = evt.data;
+    
+    try {
+      // Try to parse as JSON
+      const data = JSON.parse(message);
+      
+      if (data.type === 'transcription') {
+        const currentMessageType = data.role; // 'user' or 'model'
+        const content = data.content;
+        
+        addOrAppendMessage(currentMessageType, content);
+      } else {
+        // Handle other JSON message types if needed - ignore for now
+      }
+    } catch (e) {
+      // Fallback for non-JSON messages (backwards compatibility)
+      const currentMessageType = message.startsWith('<') ? 'model' : message.startsWith('>') ? 'user' : null;
+      
+      if (currentMessageType) {
+        // Extract the actual message content (without < or > prefix)
+        const content = message.substring(2);
+        addOrAppendMessage(currentMessageType, content);
+      }
+      // Ignore other non-JSON messages
+    }
   });
 
   // Build media constraints.
