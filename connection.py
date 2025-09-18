@@ -86,9 +86,10 @@ class Connection:
         sdp_response = self.pc.localDescription.sdp
         found = re.findall(r"a=rtpmap:(\d+) opus/48000/2", sdp_response)
         if found:
+            # usedtx=1;  Makes the LLM response much slower
             sdp_response = sdp_response.replace(
                 "opus/48000/2\r\n",
-                "opus/48000/2\r\n" + f"a=fmtp:{found[0]} useinbandfec=1;usedtx=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
+                "opus/48000/2\r\n" + f"a=fmtp:{found[0]} useinbandfec=1;maxaveragebitrate={AUDIO_BITRATE}\r\n",
             )
         # Remove lines with a=fingerprint:sha-384 or a=fingerprint:sha-512
         sdp_response = re.sub(r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp_response, flags=re.MULTILINE)
