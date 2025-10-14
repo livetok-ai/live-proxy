@@ -146,7 +146,7 @@ async def create_connection(request):
         raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
 
     log_info(
-        f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']}"
+        f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']} tools: {params['tools']}"
     )
 
     # Create wrapper function that adds metadata to tool calls
