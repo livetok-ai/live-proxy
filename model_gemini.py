@@ -72,7 +72,8 @@ class Gemini(Model):
             if event.server_content:
                 if event.data:
                     mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
-                    sample_rate = int(mime_type.split("rate=")[1])
+                    parsed_mime_type = mime_type.split("rate=")
+                    sample_rate = int(parsed_mime_type[1]) if len(parsed_mime_type) > 1 else 24000
 
                     frame = AudioFrame(format="s16", layout="mono", samples=len(event.data) / 2)
                     frame.sample_rate = sample_rate
