@@ -284,8 +284,8 @@ class Connection:
                     }
                 )
                 # Log full transcript when new item is added
-                if len(self.transcript) > 1:
-                    self.info(f"Transcript updated. {self.transcript[-1]['role']} -> {self.transcript[-1]['content']}")
+                if len(self.transcript) > 2:
+                    self.info(f"Transcript updated. {self.transcript[-2]['role']} -> {self.transcript[-2]['content']}")
 
         def on_input_transcription(input_transcription):
             add_transcript("user", input_transcription)
