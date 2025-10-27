@@ -5,8 +5,6 @@ import logging
 import ssl
 import sys
 import time
-from dataclasses import dataclass
-from typing import Optional
 
 import aiohttp
 from aiohttp import web
@@ -14,25 +12,40 @@ from aiohttp_cors import ResourceOptions
 from aiohttp_cors import setup as setup_cors
 
 import metrics
-from connection import Connection
+from connection import ConnectionManager
 from logger import log_info
+from sip import SIPServer
 
 
 def in_venv():
     return sys.prefix != sys.base_prefix
 
 
-@dataclass(frozen=True)
-class ConnectionInfo:
-    connection: Connection
-    callback: Optional[str] = None
-    metadata: Optional[dict] = None
-
-    def __hash__(self):
-        return self.connection.__hash__()
+connections = ConnectionManager()
 
 
-connections = set()  # Set of ConnectionInfo objects
+def _on_connection_closed(conn_info):
+    """Callback invoked when a connection is closed."""
+    log_info(f"Connection closed: {conn_info.metadata if conn_info.metadata else 'Unknown'}")
+
+    # Calculate duration and update metrics
+    duration = time.time() - conn_info.connection.start_time if conn_info.connection.start_time else 0
+    metrics.add_connection_duration(duration)
+
+    connections.remove_connection(conn_info)
+
+    # Make callback request if URL is provided
+    if conn_info.callback:
+        asyncio.create_task(_closed_request(conn_info.connection, duration, conn_info.callback, conn_info.metadata))
+
+
+async def _on_tool_call(conn_info, tool_name, tool_id, parameters, tools):
+    """Callback invoked when a tool is called."""
+    return await _tool_call_request(conn_info.connection, tool_name, tool_id, parameters, tools, conn_info.metadata)
+
+
+# Configure ConnectionManager callbacks
+connections.configure_callbacks(closed_callback=_on_connection_closed, tool_call_callback=_on_tool_call)
 
 
 def _parse_request_body(body):
@@ -41,16 +54,16 @@ def _parse_request_body(body):
     return {key: body.get(key) for key in keys}
 
 
-def _find_connection_by_id(connection_id):
-    """Find connection info by connection ID."""
+def _get_connection_or_raise(connection_id):
+    """Find a connection by ID or raise appropriate HTTP error."""
     if not connection_id:
         raise web.HTTPBadRequest(text="Missing connection_id")
 
-    for info in connections:
-        if info.connection.id == connection_id:
-            return info
+    conn_info = connections.find_connection_by_id(connection_id)
+    if not conn_info:
+        raise web.HTTPNotFound(text="Connection not found")
 
-    raise web.HTTPNotFound(text="Connection not found")
+    return conn_info
 
 
 async def _closed_request(connection, duration, callback, metadata):
@@ -117,28 +130,6 @@ async def _tool_call_request(connection, tool_name, tool_id, parameters, tools, 
 async def create_connection(request):
     log_info("HTTP create connection request")
 
-    def on_connection_closed(connection):
-        # Find and remove the connection info
-        conn_info = None
-        for info in connections:
-            if info.connection == connection:
-                conn_info = info
-                break
-
-        log_info(f"Connection closed: {conn_info.metadata if conn_info.metadata else 'Unknown'}")
-
-        if conn_info:
-            connections.discard(conn_info)
-
-            # Calculate duration and update metrics
-            duration = time.time() - connection.start_time if connection.start_time else 0
-            metrics.add_connection_duration(duration)
-            metrics.set_open_connections(len(connections))
-
-            # Make callback request if URL is provided
-            if conn_info.callback:
-                asyncio.create_task(_closed_request(connection, duration, conn_info.callback, conn_info.metadata))
-
     body = await request.json()
     params = _parse_request_body(body)
 
@@ -149,21 +140,11 @@ async def create_connection(request):
         f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']} tools: {params['tools']}"
     )
 
-    # Create wrapper function that adds metadata to tool calls
-    async def tool_call_wrapper(connection, tool_name, tool_id, parameters, tools):
-        return await _tool_call_request(connection, tool_name, tool_id, parameters, tools, params["metadata"])
-
-    # Create and start connection
-    connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper)
-    conn_info = ConnectionInfo(connection=connection, callback=params["callback"], metadata=params["metadata"])
-    connections.add(conn_info)
-
-    # Update metrics
-    metrics.increment_connection()
-    metrics.set_open_connections(len(connections))
+    # Create and start connection using ConnectionManager
+    conn_info = connections.create_connection(callback=params["callback"], metadata=params["metadata"])
 
     try:
-        sdp_response = await connection.start(
+        sdp_response = await conn_info.connection.start(
             params["sdp"],
             params["model"],
             params["system_instructions"],
@@ -182,8 +163,7 @@ async def create_connection(request):
             ),
         )
     except Exception:
-        connections.discard(conn_info)
-        metrics.set_open_connections(len(connections))
+        connections.remove_connection(conn_info)
         raise
 
 
@@ -192,7 +172,7 @@ async def delete_connection(request):
 
     log_info(f"HTTP delete connection request {connection_id}")
 
-    conn_info = _find_connection_by_id(connection_id)
+    conn_info = _get_connection_or_raise(connection_id)
 
     try:
         await conn_info.connection.close()
@@ -209,7 +189,7 @@ async def update_connection(request):
 
     log_info(f"HTTP update connection request {connection_id}")
 
-    _find_connection_by_id(connection_id)  # Validate connection exists
+    conn_info = _get_connection_or_raise(connection_id)
 
     try:
         # await conn_info.connection.update()
@@ -232,9 +212,38 @@ async def metrics_endpoint(request):
 
 async def on_shutdown(app):
     # close peer connections
-    coros = [conn_info.connection.close() for conn_info in connections]
-    await asyncio.gather(*coros)
-    connections.clear()
+    await connections.close_all()
+    # Stop SIP server if running
+    if hasattr(app, "sip_server"):
+        await app.sip_server.stop()
+
+
+async def run_servers(app, host, port, ssl_context, sip_host, sip_port, sip_callback_url):
+    """Run both the web app and SIP server concurrently."""
+    # Create SIP server
+    sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)
+    app.sip_server = sip_server
+
+    # Create tasks for both servers
+    log_info(f"HTTP server listening on {host}:{port}")
+    web_task = asyncio.create_task(
+        web._run_app(
+            app,
+            access_log=None,
+            host=host,
+            port=port,
+            ssl_context=ssl_context,
+        )
+    )
+
+    sip_task = asyncio.create_task(sip_server.start())
+
+    # Wait for both to complete (or until one fails)
+    try:
+        await asyncio.gather(web_task, sip_task)
+    except Exception as e:
+        log_info(f"Error running servers: {e}")
+        raise
 
 
 if __name__ == "__main__":
@@ -246,6 +255,9 @@ if __name__ == "__main__":
     parser.add_argument("--key-file")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--sip-host", default="0.0.0.0")
+    parser.add_argument("--sip-port", type=int, default=5060)
+    parser.add_argument("--sip-callback-url")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -276,11 +288,13 @@ if __name__ == "__main__":
     app.router.add_static("/demo", "demo")
 
     asyncio.run(
-        web._run_app(
+        run_servers(
             app,
-            access_log=None,
-            host=args.host,
-            port=args.port,
-            ssl_context=ssl_context,
+            args.host,
+            args.port,
+            ssl_context,
+            args.sip_host,
+            args.sip_port,
+            args.sip_callback_url,
         )
     )

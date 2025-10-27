@@ -4,6 +4,8 @@ import json
 import re
 import time
 import uuid
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 from aiortc import (
@@ -16,6 +18,7 @@ from aiortc import (
 from av import AudioFrame
 from PIL import Image
 
+import metrics
 from logger import log_info
 from model import ModelEvents
 from model_gemini import connect_gemini
@@ -363,3 +366,91 @@ class Connection:
         if self.genai_session:
             await self.genai_session.close()
             self.genai_session = None
+
+
+@dataclass(frozen=True)
+class ConnectionInfo:
+    connection: Connection
+    callback: Optional[str] = None
+    metadata: Optional[dict] = None
+
+    def __hash__(self):
+        return self.connection.__hash__()
+
+
+class ConnectionManager:
+    """Manages all active connections. Singleton pattern."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ConnectionManager, cls).__new__(cls)
+            cls._instance.connections = set()  # Set of ConnectionInfo objects
+            cls._instance._closed_callback = None
+            cls._instance._tool_call_callback = None
+        return cls._instance
+
+    def configure_callbacks(self, closed_callback=None, tool_call_callback=None):
+        """Configure the callbacks that will be used for all connections."""
+        self._closed_callback = closed_callback
+        self._tool_call_callback = tool_call_callback
+
+    def create_connection(self, callback=None, metadata=None):
+        """Create a new connection and add it to the manager."""
+
+        def on_connection_closed(connection):
+            # Find and remove the connection info
+            conn_info = None
+            for info in self.connections:
+                if info.connection == connection:
+                    conn_info = info
+                    break
+
+            if conn_info and self._closed_callback:
+                self._closed_callback(conn_info)
+
+        async def tool_call_wrapper(connection, tool_name, tool_id, parameters, tools):
+            # Find connection info
+            conn_info = None
+            for info in self.connections:
+                if info.connection == connection:
+                    conn_info = info
+                    break
+
+            if conn_info and self._tool_call_callback:
+                return await self._tool_call_callback(conn_info, tool_name, tool_id, parameters, tools)
+            return {"error": "Tool calling not configured"}
+
+        connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper)
+        conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
+        self.connections.add(conn_info)
+
+        # Update metrics
+        metrics.increment_connection()
+        metrics.set_open_connections(len(self.connections))
+
+        return conn_info
+
+    def find_connection_by_id(self, connection_id):
+        """Find connection info by connection ID."""
+        if not connection_id:
+            return None
+
+        for info in self.connections:
+            if info.connection.id == connection_id:
+                return info
+
+        return None
+
+    def remove_connection(self, conn_info):
+        """Remove a connection from the manager."""
+        self.connections.discard(conn_info)
+        # Update metrics
+        metrics.set_open_connections(len(self.connections))
+
+    async def close_all(self):
+        """Close all connections."""
+        coros = [conn_info.connection.close() for conn_info in self.connections]
+        await asyncio.gather(*coros)
+        self.connections.clear()

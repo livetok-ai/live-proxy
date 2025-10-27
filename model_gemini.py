@@ -13,7 +13,8 @@ from model import Input, Model, ModelEvents, Output
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
-USE_VERTEX_AI = os.getenv('USE_VERTEX_AI', 'false').lower() == 'true'
+USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+
 
 class Gemini(Model):
     def __init__(self, session, tools, tool_callback=None):
@@ -144,8 +145,7 @@ async def connect_gemini(
             "https://www.googleapis.com/auth/cloud-platform",
         ]
         credentials = oauth2.service_account.Credentials.from_service_account_file(
-            os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE'), 
-            scopes=scopes
+            os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"), scopes=scopes
         )
         client = genai.Client(
             vertexai=True,
@@ -202,7 +202,8 @@ async def connect_gemini(
     )
 
     async with client.aio.live.connect(
-        model="gemini-live-2.5-flash-preview-native-audio-09-2025",
+        # Vertex AI model="gemini-live-2.5-flash-preview-native-audio-09-2025",
+        model="gemini-2.5-flash-preview-native-audio-dialog" if model == "gemini" else model,
         config=config,
     ) as session:
         yield Gemini(session, tools, tool_callback)
