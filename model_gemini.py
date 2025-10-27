@@ -1,9 +1,10 @@
 import contextlib
+import os
 import io
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
-from google import genai
+from google import genai, auth, oauth2
 from PIL.Image import Image
 
 # from logger import log_info
@@ -12,7 +13,7 @@ from model import Input, Model, ModelEvents, Output
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
-
+USE_VERTEX_AI = os.getenv('USE_VERTEX_AI', 'false').lower() == 'true'
 
 class Gemini(Model):
     def __init__(self, session, tools, tool_callback=None):
@@ -137,10 +138,25 @@ class Gemini(Model):
 async def connect_gemini(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
 ) -> AsyncGenerator[Gemini, None]:
-    client = genai.Client(
-        api_key=api_key,
-        http_options=genai.types.HttpOptions(api_version="v1alpha"),
-    )
+    if USE_VERTEX_AI:
+        scopes = [
+            "https://www.googleapis.com/auth/generative-language",
+            "https://www.googleapis.com/auth/cloud-platform",
+        ]
+        credentials = oauth2.service_account.Credentials.from_service_account_file(
+            os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE'), 
+            scopes=scopes
+        )
+        client = genai.Client(
+            vertexai=True,
+            credentials=credentials,
+            http_options=genai.types.HttpOptions(api_version="v1beta1"),
+        )
+    else:
+        client = genai.Client(
+            api_key=api_key,
+            http_options=genai.types.HttpOptions(api_version="v1alpha"),
+        )
 
     all_tools = (
         [
@@ -186,7 +202,17 @@ async def connect_gemini(
     )
 
     async with client.aio.live.connect(
-        model="gemini-2.5-flash-preview-native-audio-dialog" if model == "gemini" else model,
+        model="gemini-live-2.5-flash-preview-native-audio-09-2025",
         config=config,
     ) as session:
         yield Gemini(session, tools, tool_callback)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def main():
+        async with connect_gemini(model="gemini") as gemini:
+            print("Connected to Gemini")
+
+    asyncio.run(main())
