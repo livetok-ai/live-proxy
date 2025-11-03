@@ -23,6 +23,7 @@ from logger import log_info
 from model import ModelEvents
 from model_gemini import connect_gemini
 from model_openai import connect_openai
+from simplepeerconnection import SimplePeerConnection
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 32000
@@ -66,7 +67,7 @@ class Connection:
         self.voice = voice
         self.language = language
         self.api_key = api_key
-        offer = RTCSessionDescription(sdp=sdp, type="offer")
+        is_webrtc = 'fingerprint' in sdp
         self.pc = RTCPeerConnection(
             RTCConfiguration(
                 iceServers=[
@@ -75,12 +76,13 @@ class Connection:
                     )
                 ]
             )
-        )
+        ) if is_webrtc else SimplePeerConnection()
 
         self.last_message_time = time.time()
         self.start_time = time.time()
         asyncio.ensure_future(self._run(model))
 
+        offer = RTCSessionDescription(sdp=sdp, type="offer")
         await self.pc.setRemoteDescription(offer)
 
         answer = await self.pc.createAnswer()

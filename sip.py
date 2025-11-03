@@ -227,12 +227,25 @@ class SIPServer:
             cseq: CSeq header from the request
             body: Optional body content (e.g., SDP)
         """
+        # Get the server socket address for Contact header
+        sockname = writer.get_extra_info("sockname")
+        if sockname:
+            contact_host = sockname[0]  # IP address from the actual socket
+            contact_port = sockname[1]  # Port from the actual socket
+        else:
+            # Fallback to configured host/port
+            contact_host = self.host if self.host != "0.0.0.0" else "localhost"
+            contact_port = self.port
+        
+        contact_uri = f"<sip:{contact_host}:{contact_port};transport=tcp>"
+        
         response = f"SIP/2.0 {status_code} {reason}\r\n"
         response += f"Via: {via}\r\n"
         response += f"From: {from_hdr}\r\n"
         response += f"To: {to_hdr}\r\n"
         response += f"Call-ID: {call_id}\r\n"
         response += f"CSeq: {cseq}\r\n"
+        response += f"Contact: {contact_uri}\r\n"
 
         if body:
             response += f"Content-Type: application/sdp\r\n"
@@ -368,9 +381,6 @@ class SIPServer:
             callback_success, callback_data = await self.make_callback(uri, from_uri)
 
             if callback_success and callback_data:
-                # Create new connection
-                connection = Connection()
-
                 # Extract connection parameters from callback response
                 model = callback_data.get("model", "gemini")
                 system_instructions = callback_data.get("system_instructions")
@@ -381,6 +391,9 @@ class SIPServer:
 
                 logger.info(f"Starting connection with model={model}")
 
+                conn_info = connections.create_connection(callback=self.callback_url, metadata=callback_data)
+                connection = conn_info.connection
+                
                 try:
                     # Start connection and get SDP response
                     sdp_response = await connection.start(
@@ -398,7 +411,6 @@ class SIPServer:
                         session = SIPSession(uri=uri, session_id=session_id, connection=connection)
                         self.sessions[session_id] = session
 
-                        connection = create_connection(callback_data)
                         logger.info(f"Created new session {session_id} for URI {uri} with connection {connection.id}")
                         logger.info(f"Active sessions: {len(self.sessions)}")
 
