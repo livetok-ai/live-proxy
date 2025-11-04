@@ -425,6 +425,7 @@ class SIPServer:
                 connection = conn_info.connection
 
                 try:
+                    logger.info(f"SDP answer: {body}")
                     # Start connection and get SDP response
                     sdp_response = await connection.start(
                         sdp=body,
@@ -435,6 +436,7 @@ class SIPServer:
                         language=language,
                         api_key=api_key,
                     )
+                    logger.info(f"SDP response: {sdp_response}")
 
                     # Create new session with connection
                     if session_id:
