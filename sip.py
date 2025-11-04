@@ -10,8 +10,12 @@ from typing import Dict, List, Optional
 import aiohttp
 
 from connection import Connection, ConnectionManager
+from network import get_public_ip
 
 logger = logging.getLogger(__name__)
+
+# Enable detailed SIP message logging when SIP_DEBUG env var is set
+SIP_DEBUG = os.getenv("SIP_DEBUG", "").lower() in ("1", "true", "yes")
 
 connections = ConnectionManager()
 
@@ -30,7 +34,7 @@ class SIPSession:
 class SIPServer:
     """TCP server that handles SIP-like message parsing."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5060, callback_url: Optional[str] = None):
+    def __init__(self, host: Optional[str] = None, port: int = 5060, callback_url: Optional[str] = None):
         """
         Initialize the SIP server.
 
@@ -39,7 +43,7 @@ class SIPServer:
             port: Port number to listen on (default: 5060, standard SIP port)
             callback_url: URL to call when receiving INVITE messages
         """
-        self.host = host
+        self.host = host if host and host != "0.0.0.0" else get_public_ip()
         self.port = port
         self.callback_url = callback_url
         self.server: Optional[asyncio.Server] = None
@@ -64,6 +68,10 @@ class SIPServer:
                 if not message:
                     logger.info(f"Connection closed by {addr}")
                     break
+
+                # Log complete received message if SIP_DEBUG is enabled
+                if SIP_DEBUG:
+                    logger.info(f"<<< RECEIVED SIP MESSAGE from {addr} <<<\n{message}\n>>> END RECEIVED MESSAGE >>>")
 
                 # Parse the message into header lines and body
                 lines, body = self.parse_message(message)
@@ -228,7 +236,8 @@ class SIPServer:
             body: Optional body content (e.g., SDP)
         """
         # Get the server socket address for Contact header
-        contact_host = self.host if self.host != "0.0.0.0" else "localhost"
+        # Use get_public_ip() if host is 0.0.0.0
+        contact_host = self.host
         contact_port = self.port
 
         contact_uri = f"<sip:{contact_host}:{contact_port};transport=tcp>"
@@ -252,6 +261,12 @@ class SIPServer:
 
         writer.write(response.encode("utf-8"))
         await writer.drain()
+
+        # Log complete sent message if SIP_DEBUG is enabled
+        if SIP_DEBUG:
+            addr = writer.get_extra_info("peername")
+            logger.info(f">>> SENT SIP MESSAGE to {addr} >>>\n{response}<<< END SENT MESSAGE <<<")
+
         logger.info(
             f"Sent SIP response: {status_code} {reason}" + (f" with SDP body ({len(body)} bytes)" if body else "")
         )
@@ -416,16 +431,15 @@ class SIPServer:
                 voice = callback_data.get("voice")
                 language = callback_data.get("language")
                 api_key = callback_data.get("api_key")
+                callback = callback_data.get("callback")
+                metadata = callback_data.get("metadata")
 
                 logger.info(f"Starting connection with model={model}")
 
-                conn_info = connections.create_connection(
-                    callback=self.callback_url, metadata=callback_data, public_ip=self.host
-                )
+                conn_info = connections.create_connection(callback=callback, metadata=metadata, public_ip=self.host)
                 connection = conn_info.connection
 
                 try:
-                    logger.info(f"SDP answer: {body}")
                     # Start connection and get SDP response
                     sdp_response = await connection.start(
                         sdp=body,
@@ -436,8 +450,6 @@ class SIPServer:
                         language=language,
                         api_key=api_key,
                     )
-                    logger.info(f"SDP response: {sdp_response}")
-
                     # Create new session with connection
                     if session_id:
                         session = SIPSession(uri=uri, session_id=session_id, connection=connection)

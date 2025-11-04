@@ -255,7 +255,7 @@ if __name__ == "__main__":
     parser.add_argument("--key-file")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--sip-host", default="0.0.0.0")
+    parser.add_argument("--sip-host", default=None)
     parser.add_argument("--sip-port", type=int, default=5060)
     parser.add_argument("--sip-callback-url")
     args = parser.parse_args()

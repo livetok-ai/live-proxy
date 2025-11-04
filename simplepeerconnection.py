@@ -8,14 +8,16 @@ from aiortc.jitterbuffer import JitterFrame
 from aiortc.rtp import RtpPacket
 from av import AudioFrame
 
+from network import get_public_ip
+
 
 class SimplePeerConnection(AsyncIOEventEmitter):
-    def __init__(self, public_ip=None):
+    def __init__(self, public_ip):
         super().__init__()
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__socket.bind(("0.0.0.0", 0))
         self.__socket.setblocking(False)
-        self.__public_ip = public_ip if public_ip else self._get_public_ip()
+        self.__public_ip = public_ip
         self.__remote_address = None
         self.__local_track = None
         self.__remote_track = RemoteStreamTrack(kind="audio")
@@ -23,20 +25,6 @@ class SimplePeerConnection(AsyncIOEventEmitter):
         self.__pcmu_encoder = PcmuEncoder()
         self.__sequence_number = 0
         self.__ssrc = 12345  # Random SSRC identifier
-
-    def _get_public_ip(self):
-        try:
-            hostname = socket.gethostname()
-            # Get all IP addresses associated with the hostname
-            all_ips = socket.gethostbyname_ex(hostname)[2]
-            # Filter out localhost and loopback addresses
-            non_localhost_ips = [ip for ip in all_ips if not ip.startswith("127.") and not ip.startswith("::")]
-            if non_localhost_ips:
-                return non_localhost_ips[0]
-        except Exception:
-            pass
-        # Ultimate fallback to localhost
-        return "127.0.0.1"
 
     @property
     def connectionState(self) -> str:
@@ -51,7 +39,7 @@ class SimplePeerConnection(AsyncIOEventEmitter):
             f"c=IN IP4 {self.__public_ip}\r\n"
             "t=0 0\r\n"
             f"m=audio {self.__socket.getsockname()[1]} RTP/AVP 0\r\n"
-            "a=rtpmap:0 PCMU/8000\r\n"
+            "a=rtpmap:0 PCMU/8000\r\n\r\n"
         )
         return RTCSessionDescription(sdp=sdp, type="answer")
 
