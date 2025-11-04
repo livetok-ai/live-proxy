@@ -256,6 +256,31 @@ class SIPServer:
             f"Sent SIP response: {status_code} {reason}" + (f" with SDP body ({len(body)} bytes)" if body else "")
         )
 
+    def add_to_tag(self, to_hdr: str, tag: str) -> str:
+        """
+        Add a tag parameter to the To header if it doesn't already have one.
+        The tag parameter is a header parameter and must go OUTSIDE angle brackets.
+
+        Args:
+            to_hdr: Original To header
+            tag: Tag value to add
+
+        Returns:
+            To header with tag parameter
+
+        Examples:
+            "Display Name" <sip:user@host> -> "Display Name" <sip:user@host>;tag=xyz
+            <sip:user@host> -> <sip:user@host>;tag=xyz
+            sip:user@host -> sip:user@host;tag=xyz
+        """
+        # Check if the To header already has a tag
+        if ";tag=" in to_hdr:
+            return to_hdr
+
+        # The tag parameter is a header parameter, so it always goes after the URI
+        # (outside angle brackets if present)
+        return f"{to_hdr};tag={tag}"
+
     def extract_headers(self, lines: List[str]) -> Dict[str, str]:
         """
         Extract common SIP headers from message lines.
@@ -370,10 +395,14 @@ class SIPServer:
                     await self.send_sip_response(writer, 400, "Bad Request", session_id, via, from_hdr, to_hdr, cseq)
                 return
 
+            # Generate a tag for this dialog (using session_id for uniqueness)
+            to_tag = session_id[:8] if session_id else "12345678"
+            to_hdr_with_tag = self.add_to_tag(to_hdr, to_tag)
+
             # Send 180 Ringing immediately before callback
             if session_id and via and from_hdr and to_hdr and cseq:
-                logger.info("Sending 100 Trying response immediately for INVITE")
-                await self.send_sip_response(writer, 100, "Trying", session_id, via, from_hdr, to_hdr, cseq)
+                logger.info("Sending 180 Ringing response immediately for INVITE")
+                await self.send_sip_response(writer, 180, "Ringing", session_id, via, from_hdr, to_hdr_with_tag, cseq)
 
             # Make HTTP callback
             logger.info(f"Making callback for INVITE to {uri} from {from_uri}")
@@ -390,7 +419,9 @@ class SIPServer:
 
                 logger.info(f"Starting connection with model={model}")
 
-                conn_info = connections.create_connection(callback=self.callback_url, metadata=callback_data, public_ip=self.host)
+                conn_info = connections.create_connection(
+                    callback=self.callback_url, metadata=callback_data, public_ip=self.host
+                )
                 connection = conn_info.connection
 
                 try:
@@ -413,28 +444,28 @@ class SIPServer:
                         logger.info(f"Created new session {session_id} for URI {uri} with connection {connection.id}")
                         logger.info(f"Active sessions: {len(self.sessions)}")
 
-                    # Send 200 OK response with SDP
+                    # Send 200 OK response with SDP (use tagged To header)
                     if session_id and via and from_hdr and to_hdr and cseq and sdp_response:
                         await self.send_sip_response(
-                            writer, 200, "OK", session_id, via, from_hdr, to_hdr, cseq, body=sdp_response
+                            writer, 200, "OK", session_id, via, from_hdr, to_hdr_with_tag, cseq, body=sdp_response
                         )
                     else:
                         logger.warning("Missing headers or SDP for sending 200 OK response")
                         await self.send_sip_response(
-                            writer, 500, "Internal Server Error", session_id, via, from_hdr, to_hdr, cseq
+                            writer, 500, "Internal Server Error", session_id, via, from_hdr, to_hdr_with_tag, cseq
                         )
 
                 except Exception as e:
                     logger.error(f"Error starting connection: {e}", exc_info=True)
                     if session_id and via and from_hdr and to_hdr and cseq:
                         await self.send_sip_response(
-                            writer, 500, "Internal Server Error", session_id, via, from_hdr, to_hdr, cseq
+                            writer, 500, "Internal Server Error", session_id, via, from_hdr, to_hdr_with_tag, cseq
                         )
             else:
                 # Send 503 Service Unavailable if callback failed
                 if session_id and via and from_hdr and to_hdr and cseq:
                     await self.send_sip_response(
-                        writer, 503, "Service Unavailable", session_id, via, from_hdr, to_hdr, cseq
+                        writer, 503, "Service Unavailable", session_id, via, from_hdr, to_hdr_with_tag, cseq
                     )
                     logger.warning("Callback failed, sent 503 response")
 
