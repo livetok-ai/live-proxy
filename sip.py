@@ -215,7 +215,7 @@ class SIPServer:
         status_code: int,
         reason: str,
         call_id: str,
-        via: str,
+        via: List[str],
         from_hdr: str,
         to_hdr: str,
         cseq: str,
@@ -229,7 +229,7 @@ class SIPServer:
             status_code: HTTP-like status code (e.g., 200, 404)
             reason: Reason phrase (e.g., "OK", "Not Found")
             call_id: Call-ID from the request
-            via: Via header from the request
+            via: Via headers from the request (list to preserve order)
             from_hdr: From header from the request
             to_hdr: To header from the request
             cseq: CSeq header from the request
@@ -237,13 +237,17 @@ class SIPServer:
         """
         # Get the server socket address for Contact header
         # Use get_public_ip() if host is 0.0.0.0
-        contact_host = self.host
+        contact_host = self.host if self.host != "0.0.0.0" else get_public_ip()
         contact_port = self.port
 
         contact_uri = f"<sip:{contact_host}:{contact_port};transport=tcp>"
 
         response = f"SIP/2.0 {status_code} {reason}\r\n"
-        response += f"Via: {via}\r\n"
+
+        # Add all Via headers in the same order as the request (RFC 3261)
+        for via_value in via:
+            response += f"Via: {via_value}\r\n"
+
         response += f"From: {from_hdr}\r\n"
         response += f"To: {to_hdr}\r\n"
         response += f"Call-ID: {call_id}\r\n"
@@ -299,18 +303,33 @@ class SIPServer:
     def extract_headers(self, lines: List[str]) -> Dict[str, str]:
         """
         Extract common SIP headers from message lines.
+        For headers that can appear multiple times (like Via), stores all values as a list.
 
         Args:
             lines: Parsed message lines
 
         Returns:
-            Dictionary of header names to values
+            Dictionary of header names to values (or list of values for Via)
         """
         headers = {}
+        via_headers = []
+
         for line in lines[1:]:
             if ":" in line:
                 key, value = line.split(":", 1)
-                headers[key.strip()] = value.strip()
+                key = key.strip()
+                value = value.strip()
+
+                # Via headers can appear multiple times and must be preserved in order
+                if key == "Via":
+                    via_headers.append(value)
+                else:
+                    headers[key] = value
+
+        # Store Via headers as a list if multiple, or single value if one
+        if via_headers:
+            headers["Via"] = via_headers
+
         return headers
 
     async def make_callback(self, uri: str, from_uri: str) -> tuple[bool, Optional[Dict]]:
@@ -382,7 +401,10 @@ class SIPServer:
 
         # Extract headers for response
         headers = self.extract_headers(lines)
-        via = headers.get("Via", "")
+        via = headers.get("Via", [])
+        # Ensure via is always a list
+        if isinstance(via, str):
+            via = [via] if via else []
         from_hdr = headers.get("From", "")
         to_hdr = headers.get("To", "")
         cseq = headers.get("CSeq", "")
@@ -414,10 +436,10 @@ class SIPServer:
             to_tag = session_id[:8] if session_id else "12345678"
             to_hdr_with_tag = self.add_to_tag(to_hdr, to_tag)
 
-            # Send 180 Ringing immediately before callback
+            # Send 100 Trying response immediately before callback
             if session_id and via and from_hdr and to_hdr and cseq:
-                logger.info("Sending 180 Ringing response immediately for INVITE")
-                await self.send_sip_response(writer, 180, "Ringing", session_id, via, from_hdr, to_hdr_with_tag, cseq)
+                logger.info("Sending 100 Trying response immediately for INVITE")
+                await self.send_sip_response(writer, 100, "Trying", session_id, via, from_hdr, to_hdr_with_tag, cseq)
 
             # Make HTTP callback
             logger.info(f"Making callback for INVITE to {uri} from {from_uri}")
