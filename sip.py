@@ -228,17 +228,11 @@ class SIPServer:
             body: Optional body content (e.g., SDP)
         """
         # Get the server socket address for Contact header
-        sockname = writer.get_extra_info("sockname")
-        if sockname:
-            contact_host = sockname[0]  # IP address from the actual socket
-            contact_port = sockname[1]  # Port from the actual socket
-        else:
-            # Fallback to configured host/port
-            contact_host = self.host if self.host != "0.0.0.0" else "localhost"
-            contact_port = self.port
-        
+        contact_host = self.host if self.host != "0.0.0.0" else "localhost"
+        contact_port = self.port
+
         contact_uri = f"<sip:{contact_host}:{contact_port};transport=tcp>"
-        
+
         response = f"SIP/2.0 {status_code} {reason}\r\n"
         response += f"Via: {via}\r\n"
         response += f"From: {from_hdr}\r\n"
@@ -315,7 +309,7 @@ class SIPServer:
                     if 200 <= response.status < 300:
                         try:
                             response_data = await response.json()
-                            logger.info(f"Callback response data: {response_data}")
+                            # logger.info(f"Callback response data: {response_data}")
                             return True, response_data
                         except Exception as e:
                             logger.error(f"Error parsing callback response: {e}")
@@ -376,6 +370,11 @@ class SIPServer:
                     await self.send_sip_response(writer, 400, "Bad Request", session_id, via, from_hdr, to_hdr, cseq)
                 return
 
+            # Send 180 Ringing immediately before callback
+            if session_id and via and from_hdr and to_hdr and cseq:
+                logger.info("Sending 100 Trying response immediately for INVITE")
+                await self.send_sip_response(writer, 100, "Trying", session_id, via, from_hdr, to_hdr, cseq)
+
             # Make HTTP callback
             logger.info(f"Making callback for INVITE to {uri} from {from_uri}")
             callback_success, callback_data = await self.make_callback(uri, from_uri)
@@ -391,9 +390,9 @@ class SIPServer:
 
                 logger.info(f"Starting connection with model={model}")
 
-                conn_info = connections.create_connection(callback=self.callback_url, metadata=callback_data)
+                conn_info = connections.create_connection(callback=self.callback_url, metadata=callback_data, public_ip=self.host)
                 connection = conn_info.connection
-                
+
                 try:
                     # Start connection and get SDP response
                     sdp_response = await connection.start(
@@ -468,7 +467,7 @@ class SIPServer:
 
     async def start(self):
         """Start the TCP server."""
-        self.server = await asyncio.start_server(self.handle_client, self.host, self.port)
+        self.server = await asyncio.start_server(self.handle_client, "0.0.0.0", self.port)
 
         addr = self.server.sockets[0].getsockname()
         logger.info(f"SIP server listening on {addr[0]}:{addr[1]}")

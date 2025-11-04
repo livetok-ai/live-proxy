@@ -42,7 +42,7 @@ class SendingTrack(MediaStreamTrack):
 
 
 class Connection:
-    def __init__(self, closed=None, tool_call=None):
+    def __init__(self, closed=None, tool_call=None, public_ip=None):
         self.id = str(uuid.uuid4())
         self.recv_audio_track = None
         self.recv_video_track = None
@@ -59,6 +59,7 @@ class Connection:
         self.closed = closed
         self.tool_call = tool_call
         self.data_channel = None
+        self.public_ip = public_ip
 
     async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None):
         """Start the RTC connection with the given parameters"""
@@ -76,7 +77,7 @@ class Connection:
                     )
                 ]
             )
-        ) if is_webrtc else SimplePeerConnection()
+        ) if is_webrtc else SimplePeerConnection(public_ip=self.public_ip)
 
         self.last_message_time = time.time()
         self.start_time = time.time()
@@ -398,7 +399,7 @@ class ConnectionManager:
         self._closed_callback = closed_callback
         self._tool_call_callback = tool_call_callback
 
-    def create_connection(self, callback=None, metadata=None):
+    def create_connection(self, callback=None, metadata=None, public_ip=None):
         """Create a new connection and add it to the manager."""
 
         def on_connection_closed(connection):
@@ -424,7 +425,7 @@ class ConnectionManager:
                 return await self._tool_call_callback(conn_info, tool_name, tool_id, parameters, tools)
             return {"error": "Tool calling not configured"}
 
-        connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper)
+        connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper, public_ip=public_ip)
         conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
         self.connections.add(conn_info)
 

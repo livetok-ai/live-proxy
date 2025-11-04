@@ -10,12 +10,12 @@ from av import AudioFrame
 
 
 class SimplePeerConnection(AsyncIOEventEmitter):
-    def __init__(self):
+    def __init__(self, public_ip=None):
         super().__init__()
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__socket.bind(("0.0.0.0", 0))
         self.__socket.setblocking(False)
-        self.__public_ip = self._get_public_ip()
+        self.__public_ip = public_ip if public_ip else self._get_public_ip()
         self.__remote_address = None
         self.__local_track = None
         self.__remote_track = RemoteStreamTrack(kind="audio")
