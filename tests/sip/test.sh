@@ -27,7 +27,7 @@ fi
 
 # Start Python SIP server in background
 echo -e "${GREEN}Starting Python SIP server on port 5060...${NC}"
-python3 ../../sip.py &
+(cd ../.. && SIP_CALLBACK_URL=https://api.livetok.io/api/live-proxy/sip uv run python3 sip.py) &
 SIP_SERVER_PID=$!
 
 # Give server time to start
@@ -58,10 +58,10 @@ trap cleanup EXIT INT TERM
 
 # Run the Go SIP client
 echo -e "${GREEN}Running Go SIP client...${NC}"
-echo -e "${BLUE}Command: ./sipcli -url sip:testuser@localhost:5060 -transport tcp -duration 5${NC}"
+echo -e "${BLUE}Command: ./sipcli -url sip:33@localhost:5060 -transport tcp -username 123 -duration 5${NC}"
 echo ""
 
-./sipcli -url sip:testuser@localhost:5060 -transport tcp -duration 5
+./sipcli -url sip:33@localhost:5060 -transport tcp -duration 5
 
 echo ""
 echo -e "${GREEN}Test completed successfully!${NC}"

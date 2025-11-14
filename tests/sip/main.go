@@ -93,19 +93,19 @@ func main() {
 		fmt.Println("Duration: indefinite (press Ctrl+C to hangup)")
 	}
 
-	// Create SDP body with WebRTC ICE credentials (required for aiortc)
+	// Create SDP body matching Twilio Media Gateway format
 	sdpBody := "v=0\r\n" +
-		"o=- 123456 654321 IN IP4 127.0.0.1\r\n" +
-		"s=SIP Call\r\n" +
-		"c=IN IP4 127.0.0.1\r\n" +
+		"o=root 371029117 371029117 IN IP4 172.18.152.231\r\n" +
+		"s=Twilio Media Gateway\r\n" +
+		"c=IN IP4 168.86.136.193\r\n" +
 		"t=0 0\r\n" +
-		"a=ice-ufrag:abcd\r\n" +
-		"a=ice-pwd:abcdefghijklmnopqrstuvwx\r\n" +
-		"a=fingerprint:sha-256 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF\r\n" +
-		"m=audio 49170 RTP/AVP 0 8 97\r\n" +
+		"m=audio 15382 RTP/AVP 0 8 101\r\n" +
 		"a=rtpmap:0 PCMU/8000\r\n" +
 		"a=rtpmap:8 PCMA/8000\r\n" +
-		"a=rtpmap:97 opus/48000/2\r\n" +
+		"a=rtpmap:101 telephone-event/8000\r\n" +
+		"a=fmtp:101 0-16\r\n" +
+		"a=ptime:20\r\n" +
+		"a=maxptime:20\r\n" +
 		"a=sendrecv\r\n"
 
 	// Create INVITE request
