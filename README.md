@@ -2,49 +2,85 @@
 
 # Live-Proxy
 
-Live-proxy is an opensource proxy service for interacting with large language model (LLM) WebSocket APIs exposing other interfaces that are better suited for real-time use cases over the Internet. Currently, it supports Gemini and OpenAI speech-to-speech models and facilitates real-time communication using WebRTC and WebTransport.
+Live-Proxy is an open-source proxy service for interacting with large language model (LLM) WebSocket APIs, exposing interfaces better suited for real-time communication over the Internet. It supports Gemini and OpenAI speech-to-speech models and facilitates real-time communication using WebRTC, SIP, and WebTransport.
 
 ## Getting Started
 
 ### Prerequisites
 
-See README_DEV.md
+Python 3.8+ is required. See [README_DEV.md](README_DEV.md) for detailed development setup instructions.
 
 ### Running the Server
-1. Set the `GOOGLE_API_KEY` environment variable (or `OPENAI_API_KEY` or both) and run the server:
+
+1. Set your API key environment variable and run the server:
    ```bash
-   GOOGLE_API_KEY=XXX python proxy.py
+   # For Gemini
+   GOOGLE_API_KEY=your_key_here python proxy.py
+   
+   # For OpenAI
+   OPENAI_API_KEY=your_key_here python proxy.py
    ```
 
-2. Open the test page in your browser and navigate to:
+2. Open the demo page in your browser:
    ```
    http://localhost:8080/demo/index.html
    ```
 
-3. Click **Start** and begin talking with the LLM
+3. Click **Start** and begin talking with the LLM!
 
-## Using it in your own page
+## Using it in Your Own Application
+
+### WebRTC Integration
 
 ```js
-const stream = await navigator.getUserMedia({ audio: true })
+// Get user's audio stream
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+// Create peer connection
 const pc = new RTCPeerConnection();
+
+// Handle incoming audio track
 pc.ontrack = e => audioElement.srcObject = e.streams[0];
+
+// Add local audio track
 pc.addTrack(stream.getTracks()[0]);
+
+// Create and send offer
 const offer = await pc.createOffer();
 await pc.setLocalDescription(offer);
-const resp = await fetch('http://localhost:8080/', { method: 'POST', body: offer.sdp })
-await pc.setRemoteDescription({ type: 'answer', sdp: await resp.text() })
+
+// Send offer to Live-Proxy and receive answer
+const response = await fetch('http://localhost:8080/connection', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    sdp: offer.sdp,
+    type: offer.type,
+    model: 'gemini' // or 'openai'
+  })
+});
+
+const answer = await response.json();
+await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
 ```
 
-## Status and Plans
+## Features
 
-```
-[X] WebRTC interface
-[X] Audio support
-[X] Basic datachannels support
-[X] Gemini integration
-[X] OpenAI integration
-[ ] WebTransport interface (WIP)
-[X] Video support
-[ ] Implement HTTP real-time control interface 
-```
+- ✅ **WebRTC interface** - Real-time peer-to-peer communication
+- ✅ **SIP interface** - Session Initiation Protocol support for telephony integration
+- ✅ **Audio support** - Bidirectional audio streaming
+- ✅ **Video support** - Video streaming capabilities
+- ✅ **Data channels** - Send and receive messages alongside media
+- ✅ **Gemini integration** - Google's Gemini 2.0 multimodal models
+- ✅ **OpenAI integration** - OpenAI's GPT-4 real-time API
+- 🚧 **WebTransport interface** - Work in progress
+- 📋 **HTTP real-time control interface** - Planned
+
+## Documentation
+
+- [Development Setup](README_DEV.md) - Setup instructions for contributors
+- [Certificate Setup](CERT.md) - SSL certificate configuration guide
+
+## License
+
+See [LICENSE](LICENSE) file for details.

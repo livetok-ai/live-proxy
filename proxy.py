@@ -10,11 +10,15 @@ import aiohttp
 from aiohttp import web
 from aiohttp_cors import ResourceOptions
 from aiohttp_cors import setup as setup_cors
+from dotenv import load_dotenv
 
 import metrics
 from connection import ConnectionManager
 from logger import log_info
 from sip import SIPServer
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 def in_venv():
@@ -260,7 +264,9 @@ if __name__ == "__main__":
     parser.add_argument("--sip-callback-url")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
     logging.getLogger("aioice").setLevel(level=logging.WARN)
 
     if args.cert_file:
