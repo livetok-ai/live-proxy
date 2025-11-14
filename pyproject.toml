@@ -32,6 +32,9 @@ dependencies = [
     "aws-sdk-bedrock-runtime",
     "smithy-aws-core",
     "prometheus-client>=0.22.1",
+    "cartesia>=2.0.15",
+    "sounddevice>=0.5.3",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.optional-dependencies]
