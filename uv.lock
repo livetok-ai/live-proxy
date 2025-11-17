@@ -315,15 +315,6 @@ wheels = [
 ]
 
 [[package]]
-name = "blingfire2"
-version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9f/e9/312790652ab03b7e9fdd99e8fb9b941157321d06bfa4f5a68ce74d94f7cf/blingfire2-0.2.1.tar.gz", hash = "sha256:cc2c67956a012627ab597424396aff94b039f270b26329bc1410e1b2f69867e0", size = 42229969, upload-time = "2025-05-07T09:05:26.236Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/22/8158cf8e40dc1d12ecf810ff73e4fa5a6ec9d46e65370624add109943339/blingfire2-0.2.1-py3-none-any.whl", hash = "sha256:a614180ef59dbb9c70bd9201954ef5b959a8982ad9763ba3df0dbdcccc507afd", size = 42351428, upload-time = "2025-05-07T09:04:35.75Z" },
-]
-
-[[package]]
 name = "cachetools"
 version = "5.5.2"
 source = { registry = "https://pypi.org/simple" }
@@ -861,7 +852,6 @@ dependencies = [
     { name = "aioquic" },
     { name = "aiortc" },
     { name = "aws-sdk-bedrock-runtime" },
-    { name = "blingfire2" },
     { name = "cartesia" },
     { name = "google-genai" },
     { name = "nltk" },
@@ -902,7 +892,6 @@ requires-dist = [
     { name = "aiortc" },
     { name = "aws-sdk-bedrock-runtime" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "blingfire2", specifier = ">=0.2.1" },
     { name = "cartesia", specifier = ">=2.0.15" },
     { name = "google-genai" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },

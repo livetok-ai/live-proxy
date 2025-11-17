@@ -68,16 +68,20 @@ class Connection:
         self.voice = voice
         self.language = language
         self.api_key = api_key
-        is_webrtc = 'fingerprint' in sdp
-        self.pc = RTCPeerConnection(
-            RTCConfiguration(
-                iceServers=[
-                    RTCIceServer(
-                        urls="stun:stun.l.google.com:19302",
-                    )
-                ]
+        is_webrtc = "fingerprint" in sdp
+        self.pc = (
+            RTCPeerConnection(
+                RTCConfiguration(
+                    iceServers=[
+                        RTCIceServer(
+                            urls="stun:stun.l.google.com:19302",
+                        )
+                    ]
+                )
             )
-        ) if is_webrtc else SimplePeerConnection(public_ip=self.public_ip)
+            if is_webrtc
+            else SimplePeerConnection(public_ip=self.public_ip)
+        )
 
         self.last_message_time = time.time()
         self.start_time = time.time()
@@ -306,7 +310,7 @@ class Connection:
                 self.data_channel.send(message)
 
         def on_interrupted(event=None):
-            self.info(f"Received INTERRUPTED event, clearing output queue {self.output_queue.qsize()}")
+            # self.info(f"Received INTERRUPTED event, clearing output queue {self.output_queue.qsize()}")
             while not self.output_queue.empty():
                 self.output_queue.get_nowait()
             while not self.send_track.queue.empty():

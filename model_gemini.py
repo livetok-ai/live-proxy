@@ -119,9 +119,7 @@ class Gemini(Model):
             ),
             input_audio_transcription=genai.types.AudioTranscriptionConfig(),
             output_audio_transcription=genai.types.AudioTranscriptionConfig(),
-            session_resumption=(
-                genai.types.SessionResumptionConfig(handle=self.previous_session_handle)
-            ),
+            session_resumption=(genai.types.SessionResumptionConfig(handle=self.previous_session_handle)),
         )
 
         self.session_context = self.client.aio.live.connect(
@@ -135,6 +133,11 @@ class Gemini(Model):
             await self.tts.connect()
 
         log_info(f"Connected to Gemini model: {model}")
+
+    async def interrupt(self):
+        self._emit(ModelEvents.INTERRUPTED)
+        if self.tts:
+            await self.tts.reset()
 
     async def send(self, input: Input):
         try:
@@ -154,7 +157,7 @@ class Gemini(Model):
                 blob = genai.types.BlobDict(
                     data=array.getvalue(),
                     mime_type="image/jpeg",
-                    )
+                )
                 await self.session.send(input=blob)
         except Exception as e:
             log_info(f"Error sending input: {e}")
@@ -180,6 +183,7 @@ class Gemini(Model):
 
     async def _process_session_events(self, output_queue):
         """Process events from self.session and put outputs in the queue"""
+
         while self.session:
             try:
                 received = self.session.receive()
@@ -193,8 +197,8 @@ class Gemini(Model):
                                     ModelEvents.OUTPUT_TRANSCRIPTION,
                                     text,
                                 )
-                                
-                                #log_info(f"Received model turn: {text")
+
+                                # log_info(f"Received model turn: {text")
                                 if self.tts:
                                     await self.tts.send(text)
 
@@ -212,13 +216,11 @@ class Gemini(Model):
 
                         if event.server_content.interrupted:
                             # log_info(f"Interrupted: {event.server_content.interrupted}")
-                            self._emit(ModelEvents.INTERRUPTED)
-
-                            if self.tts:
-                                await self.tts.reset()
+                            await self.interrupt()
 
                         if event.server_content.input_transcription and event.server_content.input_transcription.text:
                             # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                            await self.interrupt()
                             self._emit(
                                 ModelEvents.INPUT_TRANSCRIPTION,
                                 event.server_content.input_transcription.text,
@@ -279,9 +281,9 @@ class Gemini(Model):
                         self.voice,
                         self.language,
                         self.api_key,
-                )
+                    )
         # Signal that session processing is done
-        await output_queue.put(None)      
+        await output_queue.put(None)
 
     async def _process_tts_events(self, output_queue):
         """Process audio frames from self.tts and put them in the queue"""
@@ -345,6 +347,7 @@ class Gemini(Model):
         # Wait for all close operations to complete
         if close_tasks:
             await asyncio.gather(*close_tasks, return_exceptions=True)
+
 
 @contextlib.asynccontextmanager
 async def connect_gemini(

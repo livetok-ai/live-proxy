@@ -183,7 +183,7 @@ class CartesiaTTS(Model):
 
         finally:
             self._receiving = False
-            
+
     async def recv(self) -> AsyncIterator[Output]:
         """
         Receive audio output from Cartesia TTS.
