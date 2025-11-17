@@ -120,42 +120,40 @@ class CartesiaTTS(Model):
         try:
             self._receiving = True
 
-            # ctx = self.ws.context(self._context_id)
+            ctx = self.ws.context(self._context_id)
 
-            # await ctx.send(
-            #     model_id=self.model_id,
-            #     transcript=text,
-            #     voice={"mode": "id", "id": self.voice_id},
-            #     context_id=self._context_id,
-            #     continue_=False,
-            #     stream=True,
-            #     output_format={
-            #         "container": "raw",
-            #         "encoding": "pcm_s16le",
-            #         "sample_rate": SAMPLE_RATE,
-            #     },
-            #     add_timestamps=False,
-            #     add_phoneme_timestamps=False,
-            #     use_original_timestamps=False,
-            #     # Latest SDK only: pronunciation_dict_id=None,
-            # )
-
-            # output_generator = ctx.receive()
-
-            # Send the text and stream the audio response
-            output_generator = await self.ws.send(
+            await ctx.send(
                 model_id=self.model_id,
                 transcript=text,
                 voice={"mode": "id", "id": self.voice_id},
-                # We pass complete sentences now, so we don't need to continue the context
-                # context_id=self._context_id,
+                continue_=False,
                 stream=True,
                 output_format={
                     "container": "raw",
                     "encoding": "pcm_s16le",
                     "sample_rate": SAMPLE_RATE,
                 },
+                add_timestamps=False,
+                add_phoneme_timestamps=False,
+                use_original_timestamps=False,
+                # Latest SDK only: pronunciation_dict_id=None,
             )
+
+            output_generator = ctx.receive()
+
+            # # Send the text and stream the audio response
+            # output_generator = await self.ws.send(
+            #     model_id=self.model_id,
+            #     transcript=text,
+            #     voice={"mode": "id", "id": self.voice_id},
+            #     context_id=self._context_id,
+            #     stream=True,
+            #     output_format={
+            #         "container": "raw",
+            #         "encoding": "pcm_s16le",
+            #         "sample_rate": SAMPLE_RATE,
+            #     },
+            # )
 
             async for output in output_generator:
                 if not self._receiving:
