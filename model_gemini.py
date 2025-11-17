@@ -186,7 +186,7 @@ class Gemini(Model):
                 async for event in received:
                     if event.server_content:
                         if event.server_content.model_turn:
-                            log_info(f"Received model turn: {event.server_content.model_turn}")
+                            # log_info(f"Received model turn: {event.server_content.model_turn}")
                             text = event.server_content.model_turn.parts[0].text
                             if text:
                                 self._emit(
