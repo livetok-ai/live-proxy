@@ -29,13 +29,12 @@ class Gemini(Model):
         self.language = None
         self.api_key = None
 
+        self.tts = None
         self.client = None
         self.session = None
         self.session_context = None
         self.previous_session_handle = None
 
-        log_info(f"Cartesia API key: {os.getenv('CARTESIA_API_KEY')}")
-        self.tts = CartesiaTTS() if os.getenv("CARTESIA_API_KEY") else None
         self.resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -44,6 +43,8 @@ class Gemini(Model):
         )
 
     async def connect(self, model, system_instructions, tools, tool_callback, voice, language, api_key):
+        log_info(f"Connecting to Gemini model: {model}")
+
         self.model = model
         self.system_instructions = system_instructions
         self.tools = tools
@@ -52,7 +53,11 @@ class Gemini(Model):
         self.language = language
         self.api_key = api_key
 
-        log_info(f"Connecting to Gemini model: {model}")
+        gemini_model = model
+        if model.endswith("/cartesia"):
+            gemini_model = model.replace("/cartesia", "")
+            if not self.tts and os.getenv("CARTESIA_API_KEY"):
+                self.tts = CartesiaTTS()
 
         if USE_VERTEX_AI:
             scopes = [
@@ -121,15 +126,15 @@ class Gemini(Model):
 
         self.session_context = self.client.aio.live.connect(
             # Vertex AI model="gemini-live-2.5-flash-preview-native-audio-09-2025",
-            model="gemini-live-2.5-flash-preview" if model == "gemini" else model,
+            model="gemini-live-2.5-flash-preview" if gemini_model == "gemini" else gemini_model,
             config=config,
         )
         self.session = await self.session_context.__aenter__()
 
-        log_info(f"Connected to Gemini model: {model}")
-
         if self.tts and not self.tts.connected:
             await self.tts.connect()
+
+        log_info(f"Connected to Gemini model: {model}")
 
     async def send(self, input: Input):
         try:
@@ -181,9 +186,17 @@ class Gemini(Model):
                 async for event in received:
                     if event.server_content:
                         if event.server_content.model_turn:
-                            #log_info(f"Received model turn: {event.server_content.model_turn.parts[0].text}")
-                            if self.tts:
-                                await self.tts.send(event.server_content.model_turn.parts[0].text)
+                            log_info(f"Received model turn: {event.server_content.model_turn}")
+                            text = event.server_content.model_turn.parts[0].text
+                            if text:
+                                self._emit(
+                                    ModelEvents.OUTPUT_TRANSCRIPTION,
+                                    text,
+                                )
+                                
+                                #log_info(f"Received model turn: {text")
+                                if self.tts:
+                                    await self.tts.send(text)
 
                         if event.data:
                             # log_info(f"Received data: {event.data}")
@@ -254,16 +267,18 @@ class Gemini(Model):
                             self.previous_session_handle = update.new_handle
 
             except Exception as e:
-                log_info(f"Error processing session events: {e}. Reconnecting with handle {self.previous_session_handle}...")
+                log_info(f"Error processing session events: {e}.")
 
-                await self.connect(
-                    self.model,
-                    self.system_instructions,
-                    self.tools,
-                    self.tool_callback,
-                    self.voice,
-                    self.language,
-                    self.api_key,
+                if self.session:
+                    log_info(f"Reconnecting with handle {self.previous_session_handle}...")
+                    await self.connect(
+                        self.model,
+                        self.system_instructions,
+                        self.tools,
+                        self.tool_callback,
+                        self.voice,
+                        self.language,
+                        self.api_key,
                 )
         # Signal that session processing is done
         await output_queue.put(None)      
@@ -308,6 +323,7 @@ class Gemini(Model):
         log_info("Waiting for both tasks to finish")
         # Wait for both tasks to finish
         await asyncio.gather(session_task, tts_task, return_exceptions=True)
+        log_info("All tasks finished")
 
     async def close(self):
         log_info("Closing Gemini session")
@@ -321,14 +337,14 @@ class Gemini(Model):
         if self.tts is not None:
             close_tasks.append(self.tts.close())
 
-        # Wait for all close operations to complete
-        if close_tasks:
-            await asyncio.gather(*close_tasks, return_exceptions=True)
-
+        # Mark as closing
         self.session = None
         self.session_context = None
         self.tts = None
 
+        # Wait for all close operations to complete
+        if close_tasks:
+            await asyncio.gather(*close_tasks, return_exceptions=True)
 
 @contextlib.asynccontextmanager
 async def connect_gemini(

@@ -4,6 +4,7 @@ import struct
 import sys
 from typing import AsyncIterator
 
+import uuid
 from av import AudioFrame, AudioResampler
 from cartesia import AsyncCartesia
 
@@ -12,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from logger import log_info
 from model import Input, Model, Output
+from services.cartesia.utils import parse_speakeable_text, aggreagate_sentences
 
 # Cartesia uses 22050 Hz sample rate for pcm_f32le format
 SAMPLE_RATE = 22050
@@ -42,6 +44,9 @@ class CartesiaTTS(Model):
         self._output_queue = asyncio.Queue()  # For converted AudioFrames
         self._processor_task = None  # Task that processes input queue
         self._closed = False
+        self._receiving = False
+        self._context_id = str(uuid.uuid4())
+        self._pending_text = ""
 
     @property
     def connected(self):
@@ -69,7 +74,7 @@ class CartesiaTTS(Model):
                    or Image (not supported)
         """
         if isinstance(input, str):
-            log_info(f"Cartesia TTS: Queueing text: {input[:50]}...")
+            log_info(f"Cartesia TTS: Queueing text: {input}")
             # Queue the text input for processing
             await self._input_queue.put(input)
 
@@ -93,10 +98,16 @@ class CartesiaTTS(Model):
                 except asyncio.TimeoutError:
                     continue
 
-                log_info(f"Cartesia TTS: Processing queued text: {text[:50]}...")
+                while not self._input_queue.empty():
+                    text += await self._input_queue.get()
 
-                # Process this text input
-                await self._receive_and_convert(text)
+                (speakable, incomplete) = parse_speakeable_text(self._pending_text + text)
+                (speakable, incomplete) = aggreagate_sentences(speakable, incomplete)
+
+                self._pending_text = incomplete if incomplete else ""
+
+                if speakable:
+                    await self._receive_and_convert(speakable)
 
             except Exception as e:
                 log_info(f"Error in input queue processor: {e}")
@@ -107,27 +118,55 @@ class CartesiaTTS(Model):
     async def _receive_and_convert(self, text: str):
         """Background task to receive audio from Cartesia and convert to AudioFrames."""
         try:
-            # Send the text and stream the audio response
-            output_generator = await self.ws.send(
+            self._receiving = True
+
+            ctx = self.ws.context(self._context_id)
+
+            await ctx.send(
                 model_id=self.model_id,
                 transcript=text,
                 voice={"mode": "id", "id": self.voice_id},
+                context_id=self._context_id,
+                continue_=False,
                 stream=True,
                 output_format={
                     "container": "raw",
                     "encoding": "pcm_s16le",
                     "sample_rate": SAMPLE_RATE,
                 },
+                add_timestamps=False,
+                add_phoneme_timestamps=False,
+                use_original_timestamps=False,
+                # Latest SDK only: pronunciation_dict_id=None,
             )
 
+            output_generator = ctx.receive()
+
+            # # Send the text and stream the audio response
+            # output_generator = await self.ws.send(
+            #     model_id=self.model_id,
+            #     transcript=text,
+            #     voice={"mode": "id", "id": self.voice_id},
+            #     context_id=self._context_id,
+            #     stream=True,
+            #     output_format={
+            #         "container": "raw",
+            #         "encoding": "pcm_s16le",
+            #         "sample_rate": SAMPLE_RATE,
+            #     },
+            # )
+
             async for output in output_generator:
+                if not self._receiving:
+                    break
+
                 if output.audio:
                     # The format is pcm_s16le (16-bit signed integer little-endian PCM)
                     # which is already in the correct format, so we can use it directly
                     bytes_per_sample = 2  # 16-bit = 2 bytes
                     num_samples = len(output.audio) // bytes_per_sample
 
-                    log_info(f"Cartesia TTS: Received {num_samples} samples")
+                    # log_info(f"Cartesia TTS: Received {num_samples} samples")
 
                     if num_samples > 0:
                         # Create AudioFrame with s16 format (16-bit signed integer)
@@ -139,13 +178,12 @@ class CartesiaTTS(Model):
 
                         # Put the frame in the output queue
                         await self._output_queue.put(frame)
-
-            # # Signal end of this text chunk
-            # await self._output_queue.put(None)
-
         except Exception as e:
             log_info(f"Error in receive and convert task: {e}")
 
+        finally:
+            self._receiving = False
+            
     async def recv(self) -> AsyncIterator[Output]:
         """
         Receive audio output from Cartesia TTS.
@@ -171,6 +209,12 @@ class CartesiaTTS(Model):
 
     async def reset(self):
         """Clear queued messages."""
+        self._receiving = False
+        self._pending_text = ""
+
+        while not self._input_queue.empty():
+            self._input_queue.get_nowait()
+
         while not self._output_queue.empty():
             self._output_queue.get_nowait()
 
