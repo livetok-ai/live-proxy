@@ -6,19 +6,20 @@ import ssl
 import sys
 import time
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file BEFORE other imports
+load_dotenv()
+
 import aiohttp
 from aiohttp import web
 from aiohttp_cors import ResourceOptions
 from aiohttp_cors import setup as setup_cors
-from dotenv import load_dotenv
 
 import metrics
 from connection import ConnectionManager
 from logger import log_info
 from sip import SIPServer
-
-# Load environment variables from .env file
-load_dotenv()
 
 
 def in_venv():

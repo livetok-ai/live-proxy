@@ -5,7 +5,9 @@ import io
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
-from google import genai, auth, oauth2
+from google import genai, auth
+from google.oauth2 import service_account
+from google.auth.transport import requests
 from PIL.Image import Image
 
 # from logger import log_info
@@ -15,7 +17,7 @@ from services.cartesia.tts import CartesiaTTS
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
-USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+USE_VERTEX_AI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
 
 
 class Gemini(Model):
@@ -43,7 +45,7 @@ class Gemini(Model):
         )
 
     async def connect(self, model, system_instructions, tools, tool_callback, voice, language, api_key):
-        log_info(f"Connecting to Gemini model: {model}")
+        log_info(f"Connecting to Gemini model: {model} vertexai: {USE_VERTEX_AI}")
 
         self.model = model
         self.system_instructions = system_instructions
@@ -64,11 +66,10 @@ class Gemini(Model):
                 "https://www.googleapis.com/auth/generative-language",
                 "https://www.googleapis.com/auth/cloud-platform",
             ]
-            credentials = oauth2.service_account.Credentials.from_service_account_file(
+            credentials = service_account.Credentials.from_service_account_file(
                 os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"), scopes=scopes
             )
             self.client = genai.Client(
-                vertexai=True,
                 credentials=credentials,
                 http_options=genai.types.HttpOptions(api_version="v1beta1"),
             )
@@ -108,7 +109,7 @@ class Gemini(Model):
         config = genai.types.LiveConnectConfig(
             response_modalities=["TEXT"] if self.tts else ["AUDIO"],
             enable_affective_dialog=True if "native" in model else None,
-            # proactivity=genai.types.ProactivityConfig(proactive_audio=True),
+            proactivity=genai.types.ProactivityConfig(proactive_audio=True) if "native" in model else None,
             system_instruction=system_instructions,
             tools=all_tools,
             speech_config=speech_config,
@@ -122,11 +123,16 @@ class Gemini(Model):
             session_resumption=(genai.types.SessionResumptionConfig(handle=self.previous_session_handle)),
         )
 
+        if USE_VERTEX_AI:
+            model = "gemini-live-2.5-flash-preview-native-audio-09-2025"
+        else:
+            model = "gemini-2.5-flash-native-audio-preview-09-2025" if gemini_model == "gemini" else gemini_model
+
         self.session_context = self.client.aio.live.connect(
-            # Vertex AI model="gemini-live-2.5-flash-preview-native-audio-09-2025",
-            model="gemini-live-2.5-flash-preview" if gemini_model == "gemini" else gemini_model,
+            model=model,
             config=config,
         )
+        log_info(f"session_context: {self.session_context}")
         self.session = await self.session_context.__aenter__()
 
         if self.tts and not self.tts.connected:
@@ -215,18 +221,18 @@ class Gemini(Model):
                             await output_queue.put(frame)
 
                         if event.server_content.interrupted:
-                            # log_info(f"Interrupted: {event.server_content.interrupted}")
+                            log_info(f"Interrupted: {event.server_content.interrupted}")
                             await self.interrupt()
 
                         if event.server_content.input_transcription and event.server_content.input_transcription.text:
-                            # log_info(f"Input audio transcription: {event.server_content.input_transcription}")
+                            log_info(f"Input audio transcription: {event.server_content.input_transcription}")
                             await self.interrupt()
                             self._emit(
                                 ModelEvents.INPUT_TRANSCRIPTION,
                                 event.server_content.input_transcription.text,
                             )
                         if event.server_content.output_transcription and event.server_content.output_transcription.text:
-                            # log_info(f"Output audio transcription: {event.server_content.output_transcription}")
+                            log_info(f"Output audio transcription: {event.server_content.output_transcription}")
                             self._emit(
                                 ModelEvents.OUTPUT_TRANSCRIPTION,
                                 event.server_content.output_transcription.text,
@@ -244,6 +250,7 @@ class Gemini(Model):
                         )
 
                     if event.tool_call:
+                        log_info(f"Received tool call: {event.tool_call}")
                         try:
                             await self._handle_tool_call(event)
                         except Exception as e:

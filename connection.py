@@ -68,20 +68,16 @@ class Connection:
         self.voice = voice
         self.language = language
         self.api_key = api_key
-        is_webrtc = "fingerprint" in sdp
-        self.pc = (
-            RTCPeerConnection(
-                RTCConfiguration(
-                    iceServers=[
-                        RTCIceServer(
-                            urls="stun:stun.l.google.com:19302",
-                        )
-                    ]
-                )
+        is_webrtc = 'fingerprint' in sdp
+        self.pc = RTCPeerConnection(
+            RTCConfiguration(
+                iceServers=[
+                    RTCIceServer(
+                        urls="stun:stun.l.google.com:19302",
+                    )
+                ]
             )
-            if is_webrtc
-            else SimplePeerConnection(public_ip=self.public_ip)
-        )
+        ) if is_webrtc else SimplePeerConnection(public_ip=self.public_ip)
 
         self.last_message_time = time.time()
         self.start_time = time.time()
@@ -187,8 +183,8 @@ class Connection:
                 try:
                     frame = await self.recv_audio_track.recv()
                     self.last_message_time = time.time()
-                    # Ignore first 5 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
-                    if time.time() - start_time < 5:
+                    # Ignore first 3 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
+                    if time.time() - start_time < 3:
                         continue
                     if not self.genai_session:
                         continue
