@@ -124,7 +124,7 @@ class Gemini(Model):
         )
 
         if USE_VERTEX_AI:
-            model = "gemini-live-2.5-flash-preview-native-audio-09-2025"
+            model = "gemini-live-2.5-flash-preview-native-audio-09-2025" if "native" in gemini_model else "gemini-live-2.5-flash-preview"
         else:
             model = "gemini-2.5-flash-native-audio-preview-09-2025" if gemini_model == "gemini" else gemini_model
 

@@ -31,7 +31,7 @@ class CartesiaTTS(Model):
 
     def __init__(self, voice_id: str = None, model_id: str = "sonic-3", api_key: str = None):
         super().__init__()
-        self.voice_id = voice_id or "a0e99841-438c-4a64-b679-ae501e7d6091"
+        self.voice_id = voice_id or "e07c00bc-4134-4eae-9ea4-1a55fb45746b"
         self.model_id = model_id
         self.api_key = api_key or os.getenv("CARTESIA_API_KEY")
 
