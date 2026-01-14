@@ -332,7 +332,7 @@ class SIPServer:
 
         return headers
 
-    async def make_callback(self, uri: str, from_uri: str) -> tuple[bool, Optional[Dict]]:
+    async def make_callback(self, uri: str, from_uri: str, headers: Dict[str, str]) -> tuple[bool, Optional[Dict]]:
         """
         Make HTTP callback to the configured callback URL.
 
@@ -348,7 +348,7 @@ class SIPServer:
             return True, {}
 
         try:
-            callback_payload = {"uri": uri, "from": from_uri}
+            callback_payload = {"uri": uri, "from": from_uri, "headers": headers}
 
             logger.info(f"Making callback to {self.callback_url} with payload: {callback_payload}")
 
@@ -443,7 +443,7 @@ class SIPServer:
 
             # Make HTTP callback
             logger.info(f"Making callback for INVITE to {uri} from {from_uri}")
-            callback_success, callback_data = await self.make_callback(uri, from_uri)
+            callback_success, callback_data = await self.make_callback(uri, from_uri, headers)
 
             if callback_success and callback_data:
                 # Extract connection parameters from callback response
