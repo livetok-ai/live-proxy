@@ -63,6 +63,7 @@ class Connection:
 
     async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None):
         """Start the RTC connection with the given parameters"""
+        self.info(f"Starting with {model} {system_instructions} {tools} {voice} {language}")
         self.system_instructions = system_instructions
         self.tools = tools
         self.voice = voice
