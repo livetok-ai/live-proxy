@@ -56,7 +56,7 @@ class Gemini(Model):
         self.api_key = api_key
 
         gemini_model = model
-        if model.endswith("/cartesia"):
+        if model and model.endswith("/cartesia"):
             gemini_model = model.replace("/cartesia", "")
             if not self.tts and os.getenv("CARTESIA_API_KEY"):
                 self.tts = CartesiaTTS()
@@ -126,7 +126,7 @@ class Gemini(Model):
         if USE_VERTEX_AI:
             model = "gemini-live-2.5-flash-preview-native-audio-09-2025" if "native" in gemini_model else "gemini-live-2.5-flash-preview"
         else:
-            model = "gemini-2.5-flash-native-audio-preview-09-2025" if gemini_model == "gemini" else gemini_model
+            model = "gemini-2.5-flash-native-audio-preview-09-2025" if gemini_model == "gemini" or not gemini_model else gemini_model
 
         self.session_context = self.client.aio.live.connect(
             model=model,
