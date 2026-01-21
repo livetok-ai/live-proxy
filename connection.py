@@ -370,7 +370,7 @@ class Connection:
             while not self.send_video_track.queue.empty():
                 self.send_video_track.queue.get_nowait();
             if self.video_session:
-                self.video_session.clear()
+                asyncio.create_task(self.video_session.clear())
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
@@ -390,7 +390,9 @@ class Connection:
                 if self.video:
                     session = Simli()
                     await session.connect()
-                    await session.send_silence()
+                    # Workaround to fix latency with simli
+                    await session.send_silence(10)
+                    await session.clear()
                     self.video_session = session
                     asyncio.ensure_future(run_generate_video())
 

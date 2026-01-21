@@ -23,6 +23,7 @@ class Simli(Model):
         self.face_id = None
         self.client = None
         self.connected = False
+        self.last_sent = time.time()
         self.send_resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -71,7 +72,11 @@ class Simli(Model):
             if isinstance(input, AudioFrame):
                 for frame in self.send_resampler.resample(input):
                     audio_data = frame.to_ndarray().astype(np.int16).tobytes()
+                    # if time.time() - self.last_sent > 1:
+                    #     await self.client.sendImmediate(audio_data)
+                    # else:
                     await self.client.send(audio_data)
+                    self.last_sent = time.time()
             elif isinstance(input, bytes):
                 await self.client.send(input)
         except Exception as e:
