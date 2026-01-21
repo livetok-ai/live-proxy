@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import os
+import time
 from typing import AsyncGenerator, AsyncIterator
 
 import numpy as np
@@ -50,11 +51,12 @@ class Simli(Model):
             apiKey=self.api_key,
             faceId=self.face_id,
             maxSessionLength=300,
-            maxIdleTime=30,
+            maxIdleTime=60,
             syncAudio=True,
+            model="fasttalk"
         )
 
-        self.client = SimliClient(config, latencyInterval=0, enable_logging=True)
+        self.client = SimliClient(config, latencyInterval=10, enable_logging=True)
         await self.client.Initialize()
         self.connected = True
 
@@ -101,6 +103,9 @@ class Simli(Model):
                 yield frame
         except Exception as e:
             log_info(f"Error receiving video from Simli: {e}")
+
+    async def clear(self):
+        await self.client.clearBuffer()
 
     async def close(self):
         log_info("Closing Simli connection")

@@ -288,7 +288,7 @@ class Connection:
                     message = json.dumps({"type": "error", "code": ERROR_VIDEO_GENERATION, "message": str(e)})
                     self.data_channel.send(message)
                 if self.video_session:
-                    await self.video_session.stop()
+                    await self.video_session.close()
                     self.video_session = None
 
         async def run_send_audio_track():
@@ -367,6 +367,10 @@ class Connection:
                 self.output_audio_queue.get_nowait()
             while not self.send_audio_track.queue.empty():
                 self.send_audio_track.queue.get_nowait()
+            while not self.send_video_track.queue.empty():
+                self.send_video_track.queue.get_nowait();
+            if self.video_session:
+                self.video_session.clear()
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
