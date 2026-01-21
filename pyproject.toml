@@ -36,6 +36,7 @@ dependencies = [
     "sounddevice>=0.5.3",
     "python-dotenv>=1.2.1",
     "nltk>=3.9.2",
+    "simli-ai",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +53,7 @@ dev = [
 live-proxy = "proxy:main"
 
 [tool.setuptools]
-py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai"]
+py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai", "model_simli"]
 
 [tool.setuptools.packages.find]
 exclude = ["demo*", "deploy*", "tests*", "venv*"]

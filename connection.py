@@ -23,18 +23,24 @@ from logger import log_info
 from model import ModelEvents
 from model_gemini import connect_gemini
 from model_openai import connect_openai
+from model_simli import Simli
 from simplepeerconnection import SimplePeerConnection
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 32000
 USE_VIDEO_BUFFER = False
 
+# Error codes:
+# 1XXX - Connection errors
+# 2XXX - Audio errors
+# 3XXX - Video errors
+ERROR_VIDEO_GENERATION = 3001
+
 
 class SendingTrack(MediaStreamTrack):
-    kind = "audio"
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, kind="audio", *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.kind = kind
         self.queue = asyncio.Queue()
 
     async def recv(self):
@@ -46,15 +52,17 @@ class Connection:
         self.id = str(uuid.uuid4())
         self.recv_audio_track = None
         self.recv_video_track = None
-        self.send_track = None
+        self.send_audio_track = None
+        self.send_video_track = None
         self.pc = None
         self.genai_session = None
+        self.video_session = None
         self.system_instructions = None
         self.timeout_task = None
         self.last_message_time = None
         self.start_time = None
         self.transcript = []
-        self.output_queue = asyncio.Queue()
+        self.output_audio_queue = asyncio.Queue()
         self.connected = False
         self.closed = closed
         self.tool_call = tool_call
@@ -69,16 +77,22 @@ class Connection:
         self.voice = voice
         self.language = language
         self.api_key = api_key
-        is_webrtc = 'fingerprint' in sdp
-        self.pc = RTCPeerConnection(
-            RTCConfiguration(
-                iceServers=[
-                    RTCIceServer(
-                        urls="stun:stun.l.google.com:19302",
-                    )
-                ]
+        self.video = "m=video" in sdp
+
+        is_webrtc = "fingerprint" in sdp
+        self.pc = (
+            RTCPeerConnection(
+                RTCConfiguration(
+                    iceServers=[
+                        RTCIceServer(
+                            urls="stun:stun.l.google.com:19302",
+                        )
+                    ]
+                )
             )
-        ) if is_webrtc else SimplePeerConnection(public_ip=self.public_ip)
+            if is_webrtc
+            else SimplePeerConnection(public_ip=self.public_ip)
+        )
 
         self.last_message_time = time.time()
         self.start_time = time.time()
@@ -86,6 +100,11 @@ class Connection:
 
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         await self.pc.setRemoteDescription(offer)
+
+        if self.video:
+            self.info("Track video added")
+            self.send_video_track = SendingTrack("video")
+            self.pc.addTrack(self.send_video_track)
 
         answer = await self.pc.createAnswer()
         await self.pc.setLocalDescription(answer)
@@ -162,8 +181,9 @@ class Connection:
                     return
 
                 self.recv_audio_track = track
-                self.send_track = SendingTrack()
-                self.pc.addTrack(self.send_track)
+                self.send_audio_track = SendingTrack("audio")
+                self.info("Track audio added")
+                self.pc.addTrack(self.send_audio_track)
                 asyncio.ensure_future(run_recv_audio_track())
 
             elif track.kind == "video":
@@ -234,11 +254,44 @@ class Connection:
             try:
                 while self.pc and self.pc.connectionState != "closed":
                     async for frame in self.genai_session.recv():
-                        self.output_queue.put_nowait(frame)
+                        if self.video_session:
+                            asyncio.create_task(self.video_session.send_audio(frame))
+                        else:
+                            self.output_audio_queue.put_nowait(frame)
             except Exception as e:
                 self.info("Error receiving from genai: %s", e)
 
-        async def run_send_track():
+        async def run_generate_video():
+            try:
+                first_frame = True
+
+                async def run_receive_synced_audio():
+                    async for frame in self.video_session.recv_audio():
+                        if not self.pc or self.pc.connectionState == "closed":
+                            break
+                        self.send_audio_track.queue.put_nowait(frame)
+
+                asyncio.create_task(run_receive_synced_audio())
+
+                async for frame in self.video_session.recv_video():
+                    if not self.pc or self.pc.connectionState == "closed":
+                        break
+                    if first_frame:
+                        first_frame = False
+                        if self.data_channel and self.data_channel.readyState == "open":
+                            message = json.dumps({"type": "video_started"})
+                            self.data_channel.send(message)
+                    self.send_video_track.queue.put_nowait(frame)
+            except Exception as e:
+                self.info("Error receiving video: %s", e)
+                if self.data_channel and self.data_channel.readyState == "open":
+                    message = json.dumps({"type": "error", "code": ERROR_VIDEO_GENERATION, "message": str(e)})
+                    self.data_channel.send(message)
+                if self.video_session:
+                    await self.video_session.stop()
+                    self.video_session = None
+
+        async def run_send_audio_track():
             timestamp = 0
             buffer = b""
             sample_rate = 0
@@ -247,8 +300,8 @@ class Connection:
 
             while self.pc and self.pc.connectionState != "closed":
                 # Check if there's a frame in the output queue
-                if (not buffer or len(buffer) < samples * 2) and not self.output_queue.empty():
-                    frame = self.output_queue.get_nowait()
+                if (not buffer or len(buffer) < samples * 2) and not self.output_audio_queue.empty():
+                    frame = self.output_audio_queue.get_nowait()
                     sample_rate = frame.sample_rate
                     samples = int(sample_rate * AUDIO_PTIME)
                     buffer += frame.to_ndarray().tobytes()
@@ -270,7 +323,9 @@ class Connection:
                     timestamp += sample_rate * AUDIO_PTIME
                     audio_frame.pts = timestamp
                     audio_frame.time_base = fractions.Fraction(1, sample_rate)
-                    self.send_track.queue.put_nowait(audio_frame)
+
+                    if not self.video_session:
+                        self.send_audio_track.queue.put_nowait(audio_frame)
 
                 # Calculate how much time to sleep to maintain AUDIO_PTIME interval
                 sleep_time = next_send_time - time.time()
@@ -307,11 +362,11 @@ class Connection:
                 self.data_channel.send(message)
 
         def on_interrupted(event=None):
-            # self.info(f"Received INTERRUPTED event, clearing output queue {self.output_queue.qsize()}")
-            while not self.output_queue.empty():
-                self.output_queue.get_nowait()
-            while not self.send_track.queue.empty():
-                self.send_track.queue.get_nowait()
+            # self.info(f"Received INTERRUPTED event, clearing output queue {self.output_audio_queue.qsize()}")
+            while not self.output_audio_queue.empty():
+                self.output_audio_queue.get_nowait()
+            while not self.send_audio_track.queue.empty():
+                self.send_audio_track.queue.get_nowait()
 
         try:
             connect_genai = connect_openai if model == "openai" else connect_gemini
@@ -326,13 +381,19 @@ class Connection:
                 self.genai_session.on(ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription)
                 self.genai_session.on(ModelEvents.INTERRUPTED, on_interrupted)
 
+                # Start the genai receiver task
+                asyncio.ensure_future(run_recv_genai())
+                if self.video:
+                    session = Simli()
+                    await session.connect()
+                    await session.send_silence()
+                    self.video_session = session
+                    asyncio.ensure_future(run_generate_video())
+
                 if self.connected:
                     await self.on_established()
 
-                # Start the genai receiver task
-                asyncio.ensure_future(run_recv_genai())
-
-                await run_send_track()
+                await run_send_audio_track()
                 self.info("Connection finished")
 
         except Exception as e:
@@ -370,6 +431,8 @@ class Connection:
         if self.genai_session:
             await self.genai_session.close()
             self.genai_session = None
+        if self.video_session:
+            await self.video_session.close()
 
 
 @dataclass(frozen=True)

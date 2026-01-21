@@ -232,13 +232,16 @@ async function start() {
   });
 
   // Build media constraints.
+  const useAudio = document.getElementById('use-audio').checked;
+  const sendVideo = document.getElementById('send-video').checked;
+  const recvVideo = document.getElementById('recv-video').checked;
 
   const constraints = {
     audio: false,
     video: false,
   };
 
-  if (document.getElementById('use-audio').checked) {
+  if (useAudio) {
     const audioConstraints = {};
 
     const device = document.getElementById('audio-input').value;
@@ -249,7 +252,7 @@ async function start() {
     constraints.audio = Object.keys(audioConstraints).length ? audioConstraints : true;
   }
 
-  if (document.getElementById('use-video').checked) {
+  if (sendVideo) {
     const videoConstraints = { width: { max: 320 }, height: { max: 240 } };
 
     const device = document.getElementById('video-input').value;
@@ -258,6 +261,12 @@ async function start() {
     }
 
     constraints.video = Object.keys(videoConstraints).length ? videoConstraints : true;
+  }
+
+  // Add transceiver for receiving video even if not sending
+  if (recvVideo && !sendVideo) {
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    document.getElementById('media').style.display = 'block';
   }
 
   if (constraints.audio || constraints.video) {

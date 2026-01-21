@@ -2,11 +2,11 @@ from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, AsyncIterator, Callable, Optional, Union
 
-from av import AudioFrame
+from av import AudioFrame, VideoFrame
 from PIL.Image import Image
 
 Input = Union[str, AudioFrame, Image]
-Output = Union[AudioFrame]
+Output = Union[AudioFrame, VideoFrame]
 
 
 class ModelEvents:

@@ -124,9 +124,17 @@ class Gemini(Model):
         )
 
         if USE_VERTEX_AI:
-            model = "gemini-live-2.5-flash-preview-native-audio-09-2025" if "native" in gemini_model else "gemini-live-2.5-flash-preview"
+            model = (
+                "gemini-live-2.5-flash-preview-native-audio-09-2025"
+                if "native" in gemini_model
+                else "gemini-live-2.5-flash-preview"
+            )
         else:
-            model = "gemini-2.5-flash-native-audio-preview-09-2025" if gemini_model == "gemini" or not gemini_model else gemini_model
+            model = (
+                "gemini-2.5-flash-native-audio-preview-09-2025"
+                if gemini_model == "gemini" or not gemini_model
+                else gemini_model
+            )
 
         self.session_context = self.client.aio.live.connect(
             model=model,
@@ -329,10 +337,10 @@ class Gemini(Model):
                 # log_info(f"Yielding output: {output}")
                 yield output
 
-        log_info("Waiting for both tasks to finish")
+        # log_info("Waiting for both tasks to finish")
         # Wait for both tasks to finish
         await asyncio.gather(session_task, tts_task, return_exceptions=True)
-        log_info("All tasks finished")
+        # log_info("All tasks finished")
 
     async def close(self):
         log_info("Closing Gemini session")
