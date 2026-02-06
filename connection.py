@@ -131,7 +131,7 @@ class Connection:
         assert self.genai_session
         assert self.connected
 
-        await self.genai_session.send("Greet the user")
+        await self.genai_session.send("Greet the user using language " + self.language)
 
     async def call_tool(self, tool_name, tool_id, parameters):
         """Wrapper for tool calls that uses the provided tool_call func"""
