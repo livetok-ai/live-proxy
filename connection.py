@@ -365,10 +365,12 @@ class Connection:
             # self.info(f"Received INTERRUPTED event, clearing output queue {self.output_audio_queue.qsize()}")
             while not self.output_audio_queue.empty():
                 self.output_audio_queue.get_nowait()
-            while not self.send_audio_track.queue.empty():
-                self.send_audio_track.queue.get_nowait()
-            while not self.send_video_track.queue.empty():
-                self.send_video_track.queue.get_nowait();
+            if self.send_audio_track:
+                while not self.send_audio_track.queue.empty():
+                    self.send_audio_track.queue.get_nowait()
+            if self.send_video_track:
+                while not self.send_video_track.queue.empty():
+                    self.send_video_track.queue.get_nowait()
             if self.video_session:
                 asyncio.create_task(self.video_session.clear())
 
