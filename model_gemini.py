@@ -45,7 +45,7 @@ class Gemini(Model):
         )
 
     async def connect(self, model, system_instructions, tools, tool_callback, voice, language, api_key):
-        log_info(f"Connecting to Gemini model: {model} vertexai: {USE_VERTEX_AI}")
+        log_info(f"Connecting to Gemini model: {model} vertexai: {USE_VERTEX_AI} tools: {len(tools) if tools else 0}")
 
         self.model = model
         self.system_instructions = system_instructions
@@ -125,13 +125,13 @@ class Gemini(Model):
 
         if USE_VERTEX_AI:
             model = (
-                "gemini-live-2.5-flash-preview-native-audio-09-2025"
+                "gemini-live-2.5-flash-preview-native-audio-12-2025"
                 if "native" in gemini_model
                 else "gemini-live-2.5-flash-preview"
             )
         else:
             model = (
-                "gemini-2.5-flash-native-audio-preview-09-2025"
+                "gemini-2.5-flash-native-audio-preview-12-2025"
                 if gemini_model == "gemini" or not gemini_model
                 else gemini_model
             )
@@ -140,7 +140,6 @@ class Gemini(Model):
             model=model,
             config=config,
         )
-        log_info(f"session_context: {self.session_context}")
         self.session = await self.session_context.__aenter__()
 
         if self.tts and not self.tts.connected:
