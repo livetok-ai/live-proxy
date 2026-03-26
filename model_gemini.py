@@ -153,25 +153,21 @@ class Gemini(Model):
             await self.tts.reset()
 
     async def send(self, input: Input):
+        if not self.session:
+            return
         try:
             if isinstance(input, str):
-                await self.session.send(input=input, end_of_turn=True)
+                await self.session.send_realtime_input(text=input)
             elif isinstance(input, AudioFrame):
                 for frame in self.resampler.resample(input):
-                    blob = genai.types.BlobDict(
-                        data=frame.to_ndarray().tobytes(),
-                        mime_type=f"audio/pcm;rate={SAMPLE_RATE}",
+                    await self.session.send_realtime_input(
+                        audio=genai.types.Blob(
+                            data=frame.to_ndarray().tobytes(),
+                            mime_type=f"audio/pcm;rate={SAMPLE_RATE}",
+                        )
                     )
-                    await self.session.send(input=blob)
             elif isinstance(input, Image):
-                array = io.BytesIO()
-                input.save(array, format="JPEG")
-
-                blob = genai.types.BlobDict(
-                    data=array.getvalue(),
-                    mime_type="image/jpeg",
-                )
-                await self.session.send(input=blob)
+                await self.session.send_realtime_input(video=input)
         except Exception as e:
             log_info(f"Error sending input: {e}")
 
