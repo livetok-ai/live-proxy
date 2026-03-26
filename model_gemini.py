@@ -131,9 +131,7 @@ class Gemini(Model):
             )
         else:
             model = (
-                "gemini-live-2.5-flash-native-audio"
-                if gemini_model == "gemini" or not gemini_model
-                else gemini_model
+                "gemini-live-2.5-flash-native-audio" if gemini_model == "gemini" or not gemini_model else gemini_model
             )
 
         self.session_context = self.client.aio.live.connect(

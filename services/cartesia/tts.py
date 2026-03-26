@@ -101,8 +101,8 @@ class CartesiaTTS(Model):
                 while not self._input_queue.empty():
                     text += await self._input_queue.get()
 
-                (speakable, incomplete) = parse_speakeable_text(self._pending_text + text)
-                (speakable, incomplete) = aggreagate_sentences(speakable, incomplete)
+                speakable, incomplete = parse_speakeable_text(self._pending_text + text)
+                speakable, incomplete = aggreagate_sentences(speakable, incomplete)
 
                 self._pending_text = incomplete if incomplete else ""
 

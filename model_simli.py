@@ -48,17 +48,10 @@ class Simli(Model):
 
         log_info(f"Connecting to Simli with face_id: {self.face_id}")
 
-        config = SimliConfig(
-            apiKey=self.api_key,
-            faceId=self.face_id,
-            maxSessionLength=300,
-            maxIdleTime=60,
-            syncAudio=True,
-            model="fasttalk"
-        )
+        config = SimliConfig(faceId=self.face_id, maxSessionLength=300, maxIdleTime=60, model="fasttalk")
 
-        self.client = SimliClient(config, latencyInterval=10, enable_logging=True)
-        await self.client.Initialize()
+        self.client = SimliClient(self.api_key, config)
+        await self.client.start()
         self.connected = True
 
         log_info("Connected to Simli")

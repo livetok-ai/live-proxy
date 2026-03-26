@@ -15,7 +15,7 @@ const BASE_URL = urlParams.get('base_url') || '';
 function addOrAppendMessage(messageType, content) {
   const isUser = messageType === 'user';
   const lastWasSameType = lastMessageElement && lastMessageElement.dataset.role === messageType;
-  
+
   if (lastWasSameType) {
     // Append to existing message bubble
     const messageText = lastMessageElement.querySelector('.message-text');
@@ -24,7 +24,7 @@ function addOrAppendMessage(messageType, content) {
     // Create new message bubble
     const messageDiv = document.createElement('div');
     messageDiv.dataset.role = messageType;
-    
+
     if (isUser) {
       messageDiv.className = 'flex justify-end';
       const bubble = document.createElement('div');
@@ -50,11 +50,11 @@ function addOrAppendMessage(messageType, content) {
       bubble.appendChild(textDiv);
       messageDiv.appendChild(bubble);
     }
-    
+
     dataChannelLog.appendChild(messageDiv);
     lastMessageElement = messageDiv;
   }
-  
+
   // Auto-scroll to bottom
   dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
 }
@@ -72,10 +72,11 @@ function createPeerConnection() {
 
   // connect audio / video
   pc.addEventListener('track', (evt) => {
-    if (evt.track.kind == 'video')
+    if (evt.track.kind == 'video' && document.getElementById('recv-video').checked) {
       document.getElementById('video').srcObject = evt.streams[0];
-    else
+    } else {
       document.getElementById('audio').srcObject = evt.streams[0];
+    }
   });
 
   return pc;
@@ -114,6 +115,7 @@ async function negotiate() {
   const voice = document.getElementById('voice').value;
   const language = document.getElementById('language').value;
   const apiKey = document.getElementById('api-key').value.trim();
+  const avatar = document.getElementById('recv-video').checked;
   const ragCorpus = document.getElementById('rag-corpus').value.trim();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
@@ -145,6 +147,11 @@ async function negotiate() {
   // Add RAG corpus if provided
   if (ragCorpus) {
     body.rag_corpus = ragCorpus;
+  }
+
+  // Add avatar if provided
+  if (avatar) {
+    body.avatar = avatar;
   }
 
   requestBody = JSON.stringify(body);
@@ -188,7 +195,7 @@ async function negotiate() {
 
 async function start() {
   document.getElementById('start').style.display = 'none';
-  
+
   // Reset transcription tracking and clear log
   lastMessageElement = null;
   isAppendingToLast = false;
@@ -205,15 +212,15 @@ async function start() {
   });
   dc.addEventListener('message', (evt) => {
     const message = evt.data;
-    
+
     try {
       // Try to parse as JSON
       const data = JSON.parse(message);
-      
+
       if (data.type === 'transcription') {
         const currentMessageType = data.role; // 'user' or 'model'
         const content = data.content;
-        
+
         addOrAppendMessage(currentMessageType, content);
       } else {
         // Handle other JSON message types if needed - ignore for now
@@ -221,7 +228,7 @@ async function start() {
     } catch (e) {
       // Fallback for non-JSON messages (backwards compatibility)
       const currentMessageType = message.startsWith('<') ? 'model' : message.startsWith('>') ? 'user' : null;
-      
+
       if (currentMessageType) {
         // Extract the actual message content (without < or > prefix)
         const content = message.substring(2);
@@ -294,11 +301,16 @@ async function start() {
 
 async function stop() {
   document.getElementById('stop').style.display = 'none';
+  document.getElementById('start').style.display = 'inline-block';
 
   if (pc) {
     pc.close();
     pc = null;
   }
+
+  // Clear video sources
+  document.getElementById('video').srcObject = null;
+  document.getElementById('media').style.display = 'none';
 }
 
 enumerateInputDevices();

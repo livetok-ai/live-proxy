@@ -55,7 +55,18 @@ connections.configure_callbacks(closed_callback=_on_connection_closed, tool_call
 
 def _parse_request_body(body):
     """Parse and extract common parameters from request body."""
-    keys = ["sdp", "system_instructions", "callback", "tools", "metadata", "voice", "language", "model", "api_key"]
+    keys = [
+        "sdp",
+        "system_instructions",
+        "callback",
+        "tools",
+        "metadata",
+        "voice",
+        "language",
+        "model",
+        "api_key",
+        "avatar",
+    ]
     return {key: body.get(key) for key in keys}
 
 
@@ -157,6 +168,7 @@ async def create_connection(request):
             params["voice"],
             params["language"],
             params["api_key"],
+            params["avatar"],
         )
         return web.Response(
             content_type="application/json",

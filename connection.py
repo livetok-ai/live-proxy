@@ -69,15 +69,20 @@ class Connection:
         self.data_channel = None
         self.public_ip = public_ip
 
-    async def start(self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None):
+    async def start(
+        self, sdp, model, system_instructions=None, tools=None, voice=None, language=None, api_key=None, avatar=None
+    ):
         """Start the RTC connection with the given parameters"""
-        self.info(f"Starting with {model} {system_instructions} {tools} {voice} {language}")
+        self.info(
+            f"Starting with {model} {system_instructions} {tools} {voice} {language} {'***' if api_key else 'None'} {avatar}"
+        )
         self.system_instructions = system_instructions
         self.tools = tools
         self.voice = voice
         self.language = language
         self.api_key = api_key
         self.video = "m=video" in sdp
+        self.avatar = avatar and self.video
 
         is_webrtc = "fingerprint" in sdp
         self.pc = (
@@ -101,7 +106,7 @@ class Connection:
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         await self.pc.setRemoteDescription(offer)
 
-        if self.video:
+        if self.avatar:
             self.info("Track video added")
             self.send_video_track = SendingTrack("video")
             self.pc.addTrack(self.send_video_track)
@@ -389,7 +394,7 @@ class Connection:
 
                 # Start the genai receiver task
                 asyncio.ensure_future(run_recv_genai())
-                if self.video:
+                if self.avatar:
                     session = Simli()
                     await session.connect()
                     # Workaround to fix latency with simli
