@@ -44,9 +44,10 @@ class TestConnection:
         connection = Connection()
         assert connection.recv_audio_track is None
         assert connection.recv_video_track is None
-        assert connection.send_track is None
+        assert connection.send_audio_track is None
+        assert connection.send_video_track is None
         assert connection.pc is None
-        assert connection.genai_session is None
+        assert connection.models == []
 
     @pytest.mark.asyncio
     async def test_connection_close(self):
@@ -55,26 +56,26 @@ class TestConnection:
 
         connection = Connection()
 
-        # Mock peer connection and session
+        # Mock peer connection and model
         mock_pc = AsyncMock()
-        mock_session = AsyncMock()
+        mock_model = AsyncMock()
 
         connection.pc = mock_pc
-        connection.genai_session = mock_session
+        connection.models = [mock_model]
 
         await connection.close()
 
         # Verify close was called
         mock_pc.close.assert_called_once()
-        mock_session.close.assert_called_once()
+        mock_model.close.assert_called_once()
 
         # Verify attributes are reset
         assert connection.pc is None
-        assert connection.genai_session is None
+        assert connection.models == []
 
     @pytest.mark.asyncio
     async def test_connection_close_with_none_values(self):
-        """Test Connection close method when pc and session are None."""
+        """Test Connection close method when pc and models are empty."""
         from connection import Connection
 
         connection = Connection()
@@ -83,7 +84,7 @@ class TestConnection:
         await connection.close()
 
         assert connection.pc is None
-        assert connection.genai_session is None
+        assert connection.models == []
 
 
 def test_basic_import():

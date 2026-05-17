@@ -21,10 +21,14 @@ from PIL import Image
 import metrics
 from logger import log_info
 from model import ModelEvents
-from model_gemini import connect_gemini
-from model_openai import connect_openai
-from model_simli import Simli
-from simplepeerconnection import SimplePeerConnection
+from providers.gemini.llm import Gemini
+from providers.openai.llm import OpenAI
+from providers.simli.visual import Simli
+
+MODEL_MAP = {
+    "gemini": Gemini,
+    "openai": OpenAI,
+}
 
 AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 32000
@@ -55,8 +59,7 @@ class Connection:
         self.send_audio_track = None
         self.send_video_track = None
         self.pc = None
-        self.genai_session = None
-        self.video_session = None
+        self.models = []
         self.system_instructions = None
         self.timeout_task = None
         self.last_message_time = None
@@ -85,6 +88,8 @@ class Connection:
         self.avatar = avatar and self.video
 
         is_webrtc = "fingerprint" in sdp
+        from sip.peerconnection import SimplePeerConnection
+
         self.pc = (
             RTCPeerConnection(
                 RTCConfiguration(
@@ -133,10 +138,11 @@ class Connection:
     async def on_established(self):
         self.info("Connection established")
 
-        assert self.genai_session
+        genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+        assert genai_session
         assert self.connected
 
-        await self.genai_session.send("Greet the user using language " + self.language)
+        await genai_session.send("Greet the user using language " + self.language)
 
     async def call_tool(self, tool_name, tool_id, parameters):
         """Wrapper for tool calls that uses the provided tool_call func"""
@@ -158,8 +164,9 @@ class Connection:
             @channel.on("message")
             async def on_message(message):
                 self.last_message_time = time.time()
-                if self.genai_session:
-                    await self.genai_session.send(message)
+                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+                if genai_session:
+                    await genai_session.send(message)
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -173,7 +180,8 @@ class Connection:
             if not self.connected and self.pc and self.pc.connectionState == "connected":
                 self.connected = True
 
-                if self.genai_session:
+                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+                if genai_session:
                     await self.on_established()
 
         @self.pc.on("track")
@@ -212,9 +220,10 @@ class Connection:
                     # Ignore first 3 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
                     if time.time() - start_time < 3:
                         continue
-                    if not self.genai_session:
+                    genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+                    if not genai_session:
                         continue
-                    await self.genai_session.send(frame)
+                    await genai_session.send(frame)
 
                 except Exception as e:
                     self.info("Error receiving frame: %s", e)
@@ -227,7 +236,8 @@ class Connection:
                 try:
                     frame = await self.recv_video_track.recv()
                     self.last_message_time = time.time()
-                    if not self.genai_session:
+                    genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+                    if not genai_session:
                         continue
 
                     # Limit the frame rate processed to 1 fps
@@ -247,9 +257,9 @@ class Connection:
                         for i in range(len(buffer)):
                             composite.paste(buffer[i], (image.width * i, 0))
 
-                        await self.genai_session.send(composite)
+                        await genai_session.send(composite)
                     else:
-                        await self.genai_session.send(image)
+                        await genai_session.send(image)
 
                 except Exception as e:
                     self.info("Error receiving frame: %s", e)
@@ -257,10 +267,12 @@ class Connection:
 
         async def run_recv_genai():
             try:
+                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+                video_session = next((m for m in self.models if isinstance(m, Simli)), None)
                 while self.pc and self.pc.connectionState != "closed":
-                    async for frame in self.genai_session.recv():
-                        if self.video_session:
-                            asyncio.create_task(self.video_session.send_audio(frame))
+                    async for frame in genai_session.recv():
+                        if video_session:
+                            asyncio.create_task(video_session.send_audio(frame))
                         else:
                             self.output_audio_queue.put_nowait(frame)
             except Exception as e:
@@ -269,16 +281,17 @@ class Connection:
         async def run_generate_video():
             try:
                 first_frame = True
+                video_session = next((m for m in self.models if isinstance(m, Simli)), None)
 
                 async def run_receive_synced_audio():
-                    async for frame in self.video_session.recv_audio():
+                    async for frame in video_session.recv_audio():
                         if not self.pc or self.pc.connectionState == "closed":
                             break
                         self.send_audio_track.queue.put_nowait(frame)
 
                 asyncio.create_task(run_receive_synced_audio())
 
-                async for frame in self.video_session.recv_video():
+                async for frame in video_session.recv_video():
                     if not self.pc or self.pc.connectionState == "closed":
                         break
                     if first_frame:
@@ -292,9 +305,11 @@ class Connection:
                 if self.data_channel and self.data_channel.readyState == "open":
                     message = json.dumps({"type": "error", "code": ERROR_VIDEO_GENERATION, "message": str(e)})
                     self.data_channel.send(message)
-                if self.video_session:
-                    await self.video_session.close()
-                    self.video_session = None
+                video_session = next((m for m in self.models if isinstance(m, Simli)), None)
+                if video_session:
+                    await video_session.close()
+                    if video_session in self.models:
+                        self.models.remove(video_session)
 
         async def run_send_audio_track():
             timestamp = 0
@@ -329,7 +344,8 @@ class Connection:
                     audio_frame.pts = timestamp
                     audio_frame.time_base = fractions.Fraction(1, sample_rate)
 
-                    if not self.video_session:
+                    video_session = next((m for m in self.models if isinstance(m, Simli)), None)
+                    if not video_session:
                         self.send_audio_track.queue.put_nowait(audio_frame)
 
                 # Calculate how much time to sleep to maintain AUDIO_PTIME interval
@@ -376,38 +392,55 @@ class Connection:
             if self.send_video_track:
                 while not self.send_video_track.queue.empty():
                     self.send_video_track.queue.get_nowait()
-            if self.video_session:
-                asyncio.create_task(self.video_session.clear())
+            video_session = next((m for m in self.models if isinstance(m, Simli)), None)
+            if video_session:
+                asyncio.create_task(video_session.clear())
 
         try:
-            connect_genai = connect_openai if model == "openai" else connect_gemini
+            # 1. Instantiate and connect models
+            model_class = None
+            for prefix, cls in MODEL_MAP.items():
+                if model.startswith(prefix):
+                    model_class = cls
+                    break
 
-            async with connect_genai(
-                model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language, self.api_key
-            ) as session:
-                self.info("Connected to GenAI session")
-                self.genai_session = session
+            if model_class:
+                m = model_class()
+                await m.connect(
+                    model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language, self.api_key
+                )
+                self.models.append(m)
 
-                self.genai_session.on(ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription)
-                self.genai_session.on(ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription)
-                self.genai_session.on(ModelEvents.INTERRUPTED, on_interrupted)
+            if self.avatar:
+                simli = Simli()
+                await simli.connect()
+                # Workaround to fix latency with simli
+                await simli.send_silence(10)
+                await simli.clear()
+                self.models.append(simli)
 
-                # Start the genai receiver task
+            # 2. Register event listeners for all models
+            for m in self.models:
+                m.on(ModelEvents.INPUT_TRANSCRIPTION, on_input_transcription)
+                m.on(ModelEvents.OUTPUT_TRANSCRIPTION, on_output_transcription)
+                m.on(ModelEvents.INTERRUPTED, on_interrupted)
+
+            self.info("Connected to models: %s", [type(m).__name__ for m in self.models])
+
+            # 3. Start model-specific tasks
+            genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
+            if genai_session:
                 asyncio.ensure_future(run_recv_genai())
-                if self.avatar:
-                    session = Simli()
-                    await session.connect()
-                    # Workaround to fix latency with simli
-                    await session.send_silence(10)
-                    await session.clear()
-                    self.video_session = session
-                    asyncio.ensure_future(run_generate_video())
 
-                if self.connected:
-                    await self.on_established()
+            video_session = next((m for m in self.models if isinstance(m, Simli)), None)
+            if video_session:
+                asyncio.ensure_future(run_generate_video())
 
-                await run_send_audio_track()
-                self.info("Connection finished")
+            if self.connected:
+                await self.on_established()
+
+            await run_send_audio_track()
+            self.info("Connection finished")
 
         except Exception as e:
             self.info("Error sending frame: %s", e)
@@ -441,11 +474,9 @@ class Connection:
         if self.pc:
             await self.pc.close()
             self.pc = None
-        if self.genai_session:
-            await self.genai_session.close()
-            self.genai_session = None
-        if self.video_session:
-            await self.video_session.close()
+        for m in self.models:
+            await m.close()
+        self.models = []
 
 
 @dataclass(frozen=True)

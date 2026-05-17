@@ -12,9 +12,8 @@ class TestMetricsEndpoint(AioHTTPTestCase):
 
     async def get_application(self):
         """Create test application."""
-        app = web.Application()
-        app.router.add_get("/metrics", proxy.metrics_endpoint)
-        return app
+        server = proxy.HTTPServer(host="localhost", port=8080, ssl_context=None)
+        return server.app
 
     async def test_metrics_endpoint(self):
         """Test the /metrics endpoint returns correct format."""

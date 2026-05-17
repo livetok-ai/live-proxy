@@ -59,7 +59,7 @@ class TestMetrics(unittest.TestCase):
     def test_get_content_type(self):
         """Test getting content type."""
         content_type = metrics.get_content_type()
-        self.assertEqual(content_type, "text/plain; version=0.0.4; charset=utf-8")
+        self.assertEqual(content_type, metrics.CONTENT_TYPE_LATEST)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 import pytest
-from services.cartesia.utils import parse_speakeable_text, aggreagate_sentences
+from providers.cartesia.utils import parse_speakeable_text, aggreagate_sentences
 
 
 class TestParseSpeakeableText:

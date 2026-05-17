@@ -53,7 +53,7 @@ dev = [
 live-proxy = "proxy:main"
 
 [tool.setuptools]
-py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai", "model_simli"]
+py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai"]
 
 [tool.setuptools.packages.find]
 exclude = ["demo*", "deploy*", "tests*", "venv*"]

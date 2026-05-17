@@ -28,6 +28,26 @@ Python 3.8+ is required. See [README_DEV.md](README_DEV.md) for detailed develop
 
 3. Click **Start** and begin talking with the LLM!
 
+### Running the RTC Test Client
+
+We provide a Python-based RTC test client that streams a sample MP4 video (including audio and video tracks) to the proxy server to verify real-time speech-to-text transcriptions with the Gemini Multimodal Live API.
+
+1. Ensure your API key is configured in `live-proxy/.env` (e.g. `GOOGLE_API_KEY=your_key`).
+2. Start the proxy server:
+   ```bash
+   uv run python proxy.py --port 8081
+   ```
+3. In a separate terminal, run the test client:
+   * **If inside the `live-proxy` directory:**
+     ```bash
+     uv run python tests/rtc_test_client.py
+     ```
+   * **From the repository root:**
+     ```bash
+     uv run --directory live-proxy python tests/rtc_test_client.py
+     ```
+4. Observe the proxy server logs to see the real-time transcriptions returned by the Gemini model!
+
 ## Using it in Your Own Application
 
 ### WebRTC Integration
