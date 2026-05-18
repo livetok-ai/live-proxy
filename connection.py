@@ -139,8 +139,9 @@ class Connection:
         offer = RTCSessionDescription(sdp=sdp, type="offer")
         await self.pc.setRemoteDescription(offer)
 
-        if self.avatar:
-            self.info("Track video added")
+        has_yolo = any(name.strip().startswith("yolo") for name in model.split(";"))
+        if self.avatar or (has_yolo and avatar and self.video):
+            self.info(f"Track video added for {'Simli' if self.avatar else 'YOLO'}")
             self.send_video_track = SendingTrack("video")
             self.pc.addTrack(self.send_video_track)
         else:
@@ -155,7 +156,6 @@ class Connection:
                         client_has_video_recv = True
                         break
 
-            has_yolo = any(name.strip().startswith("yolo") for name in model.split(";"))
             if has_yolo and client_has_video_recv:
                 self.info("Track video added for YOLO overlay")
                 self.send_video_track = SendingTrack("video")
