@@ -1,11 +1,10 @@
 import asyncio
 import os
-import struct
 import sys
+import uuid
 from typing import AsyncIterator
 
-import uuid
-from av import AudioFrame, AudioResampler
+from av import AudioFrame
 from cartesia import AsyncCartesia
 
 # Add parent directories to path for imports
@@ -13,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from logger import log_info
 from model import Input, Model, Output
-from providers.cartesia.utils import parse_speakeable_text, aggreagate_sentences
+from providers.cartesia.utils import aggreagate_sentences, parse_speakeable_text
 
 # Cartesia uses 22050 Hz sample rate for pcm_f32le format
 SAMPLE_RATE = 22050
@@ -240,6 +239,7 @@ class CartesiaTTS(Model):
 if __name__ == "__main__":
     import asyncio
     import logging
+
     import numpy as np
     import sounddevice as sd
 

@@ -1,10 +1,11 @@
+import argparse
 import asyncio
 import os
-import argparse
+
 import aiohttp
-from dotenv import load_dotenv
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()

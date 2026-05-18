@@ -158,7 +158,7 @@ class HTTPServer:
 
         log_info(f"HTTP update connection request {connection_id}")
 
-        conn_info = self._get_connection_or_raise(connection_id)
+        self._get_connection_or_raise(connection_id)
 
         try:
             # await conn_info.connection.update()

@@ -1,9 +1,10 @@
 import asyncio
 import os
 from typing import AsyncIterator
-from PIL.Image import Image
-from PIL import ImageDraw
+
 from av import VideoFrame
+from PIL import ImageDraw
+from PIL.Image import Image
 from ultralytics import YOLO
 
 from logger import log_info
@@ -29,16 +30,16 @@ class YoloProvider(Model):
     def get_color(self, label: str):
         # Stable, beautiful curated colors
         colors = [
-            (255, 75, 75),    # Red
-            (75, 123, 255),   # Blue
-            (75, 255, 123),   # Green
-            (180, 75, 255),   # Purple
-            (255, 140, 0),    # Orange
-            (0, 206, 209),    # Cyan
-            (255, 215, 0),    # Yellow
+            (255, 75, 75),  # Red
+            (75, 123, 255),  # Blue
+            (75, 255, 123),  # Green
+            (180, 75, 255),  # Purple
+            (255, 140, 0),  # Orange
+            (0, 206, 209),  # Cyan
+            (255, 215, 0),  # Yellow
             (255, 105, 180),  # Pink
-            (255, 20, 147),   # Deep Pink
-            (0, 250, 154),    # Medium Spring Green
+            (255, 20, 147),  # Deep Pink
+            (0, 250, 154),  # Medium Spring Green
         ]
         h = 0
         for char in label:
@@ -64,10 +65,15 @@ class YoloProvider(Model):
         if connection and connection.pc:
             for transceiver in connection.pc.getTransceivers():
                 if transceiver.kind == "video":
-                    if transceiver.direction in ("sendonly", "sendrecv") or transceiver.currentDirection in ("sendonly", "sendrecv"):
+                    if transceiver.direction in ("sendonly", "sendrecv") or transceiver.currentDirection in (
+                        "sendonly",
+                        "sendrecv",
+                    ):
                         self.client_has_video_recv = True
                         break
-        log_info(f"YOLO provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})")
+        log_info(
+            f"YOLO provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})"
+        )
 
         # Locate yolo11n.pt model. First check local directory, then check examples folder
         model_path = "yolo11n.pt"
@@ -120,15 +126,12 @@ class YoloProvider(Model):
                                     coords = b.xyxy[0].tolist()
                                     conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
                                     color = self.get_color(label)
-                                    self.last_drawn_boxes.append({
-                                        "coords": coords,
-                                        "label": label,
-                                        "conf": conf,
-                                        "color": color
-                                    })
+                                    self.last_drawn_boxes.append(
+                                        {"coords": coords, "label": label, "conf": conf, "color": color}
+                                    )
 
             if detected != self.last_detections:
-                sorted_detections = sorted(list(detected))
+                sorted_detections = sorted(detected)
                 log_info(f"YOLO detections changed: {sorted_detections}")
                 self.last_detections = detected
                 self._emit("detections_changed", sorted_detections)
@@ -188,4 +191,3 @@ class YoloProvider(Model):
     async def close(self):
         log_info("Closing YOLO provider")
         self.model = None
-

@@ -1,13 +1,11 @@
 import asyncio
 import contextlib
 import os
-import io
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
-from google import genai, auth
+from google import genai
 from google.oauth2 import service_account
-from google.auth.transport import requests
 from PIL.Image import Image
 
 # from logger import log_info

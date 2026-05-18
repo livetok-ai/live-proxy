@@ -1,4 +1,5 @@
 from typing import Optional, Tuple
+
 import nltk
 from nltk.tokenize import sent_tokenize
 

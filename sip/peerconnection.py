@@ -1,14 +1,12 @@
-import socket
 import asyncio
-from pyee.asyncio import AsyncIOEventEmitter
+import socket
+
 from aiortc import RTCSessionDescription
-from aiortc.rtcrtpreceiver import RemoteStreamTrack
 from aiortc.codecs.g711 import PcmuDecoder, PcmuEncoder
 from aiortc.jitterbuffer import JitterFrame
+from aiortc.rtcrtpreceiver import RemoteStreamTrack
 from aiortc.rtp import RtpPacket
-from av import AudioFrame
-
-from network import get_public_ip
+from pyee.asyncio import AsyncIOEventEmitter
 
 
 class SimplePeerConnection(AsyncIOEventEmitter):

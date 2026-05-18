@@ -1,17 +1,17 @@
 import asyncio
 import fractions
 import json
+
+# Suppress macOS Objective-C duplicate class warnings from av/cv2 during imports
+import os
 import re
+import sys
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-
-# Suppress macOS Objective-C duplicate class warnings from av/cv2 during imports
-import os
-import sys
 
 suppress_objc_warnings = sys.platform == "darwin"
 if suppress_objc_warnings:
@@ -584,7 +584,7 @@ class ConnectionManager:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(ConnectionManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance.connections = set()  # Set of ConnectionInfo objects
             cls._instance._closed_callback = None
             cls._instance._tool_call_callback = None

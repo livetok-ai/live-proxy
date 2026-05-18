@@ -1,7 +1,9 @@
+import fractions
+
+import numpy as np
 import pytest
 from PIL import Image
-import numpy as np
-import fractions
+
 from providers.yolo.yolo import YoloProvider
 
 
@@ -123,7 +125,7 @@ async def test_yolo_provider_sampling():
 
     # Send 5 dummy frames
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-    for i in range(5):
+    for _ in range(5):
         await provider.send(img)
 
     # YOLO model should only be called once (the first frame)

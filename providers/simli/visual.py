@@ -150,8 +150,9 @@ async def connect_simli(api_key: str = None, face_id: str = None) -> AsyncGenera
 
 
 async def main():
-    import numpy as np
     import logging
+
+    import numpy as np
 
     load_dotenv()
     logging.basicConfig(level=logging.INFO)

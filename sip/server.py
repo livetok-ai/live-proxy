@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from connection import Connection, ConnectionManager
+    from connection import Connection
 
 import aiohttp
 
@@ -258,12 +258,12 @@ class SIPServer:
         response += f"Contact: {contact_uri}\r\n"
 
         if body:
-            response += f"Content-Type: application/sdp\r\n"
+            response += "Content-Type: application/sdp\r\n"
             response += f"Content-Length: {len(body)}\r\n"
             response += "\r\n"
             response += body
         else:
-            response += f"Content-Length: 0\r\n"
+            response += "Content-Length: 0\r\n"
             response += "\r\n"
 
         writer.write(response.encode("utf-8"))
