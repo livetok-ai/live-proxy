@@ -274,7 +274,7 @@ class Connection:
 
         async def run_recv_video_track():
             buffer = []
-            last_frame_time = 0
+            last_llm_frame_time = 0.0
             while self.pc and self.pc.connectionState != "closed":
                 try:
                     frame = await self.recv_video_track.recv()
@@ -283,32 +283,32 @@ class Connection:
                     if not has_active_video_models:
                         continue
 
-                    # Limit the frame rate processed to 1 fps
-                    if time.time() - last_frame_time < 1:
-                        continue
-                    last_frame_time = time.time()
-
                     image = frame.to_image()
                     image.pts = frame.pts
                     image.time_base = frame.time_base
 
-                    if USE_VIDEO_BUFFER:
-                        buffer.append(image)
-                        if len(buffer) > 10:
-                            buffer.pop(0)
+                    now = time.time()
+                    should_send_to_llm = now - last_llm_frame_time >= 1.0
+                    if should_send_to_llm:
+                        last_llm_frame_time = now
 
-                        # Compose horizontally all the images in buffer
-                        composite = Image.new("RGB", (image.width * len(buffer), image.height))
-                        for i in range(len(buffer)):
-                            composite.paste(buffer[i], (image.width * i, 0))
+                    for m in self.models:
+                        if isinstance(m, YoloProvider):
+                            await m.send(image)
+                        elif not isinstance(m, Simli):
+                            if should_send_to_llm:
+                                if USE_VIDEO_BUFFER:
+                                    buffer.append(image)
+                                    if len(buffer) > 10:
+                                        buffer.pop(0)
 
-                        for m in self.models:
-                            if not isinstance(m, Simli):
-                                await m.send(composite)
-                    else:
-                        for m in self.models:
-                            if not isinstance(m, Simli):
-                                await m.send(image)
+                                    # Compose horizontally all the images in buffer
+                                    composite = Image.new("RGB", (image.width * len(buffer), image.height))
+                                    for i in range(len(buffer)):
+                                        composite.paste(buffer[i], (image.width * i, 0))
+                                    await m.send(composite)
+                                else:
+                                    await m.send(image)
 
                 except Exception as e:
                     self.info("Error receiving frame: %s", e)
