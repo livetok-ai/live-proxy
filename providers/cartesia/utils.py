@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 import nltk
 from nltk.tokenize import sent_tokenize
 
-nltk.download("punkt_tab")
+nltk.download("punkt_tab", quiet=True)
 
 SENTENCE_ENDING_PUNCTUATION = (
     # Latin script punctuation (most European languages, Filipino, etc.)

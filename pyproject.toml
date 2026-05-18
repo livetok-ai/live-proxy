@@ -37,6 +37,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "nltk>=3.9.2",
     "simli-ai",
+    "ultralytics>=8.4.51",
 ]
 
 [project.optional-dependencies]

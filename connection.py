@@ -8,26 +8,53 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-from aiortc import (
-    MediaStreamTrack,
-    RTCConfiguration,
-    RTCIceServer,
-    RTCPeerConnection,
-    RTCSessionDescription,
-)
-from av import AudioFrame
-from PIL import Image
 
-import metrics
-from logger import log_info
-from model import ModelEvents
-from providers.gemini.llm import Gemini
-from providers.openai.llm import OpenAI
-from providers.simli.visual import Simli
+# Suppress macOS Objective-C duplicate class warnings from av/cv2 during imports
+import os
+import sys
+
+suppress_objc_warnings = sys.platform == "darwin"
+if suppress_objc_warnings:
+    try:
+        stderr_fd = sys.stderr.fileno()
+        dup_stderr = os.dup(stderr_fd)
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, stderr_fd)
+        os.close(devnull)
+    except Exception:
+        suppress_objc_warnings = False
+
+try:
+    from aiortc import (
+        MediaStreamTrack,
+        RTCConfiguration,
+        RTCIceServer,
+        RTCPeerConnection,
+        RTCSessionDescription,
+    )
+    from av import AudioFrame, VideoFrame
+    from PIL import Image
+
+    import metrics
+    from logger import log_info
+    from model import ModelEvents
+    from providers.gemini.llm import Gemini
+    from providers.openai.llm import OpenAI
+    from providers.simli.visual import Simli
+    from providers.yolo.yolo import YoloProvider
+finally:
+    if suppress_objc_warnings:
+        try:
+            os.dup2(dup_stderr, stderr_fd)
+            os.close(dup_stderr)
+        except Exception:
+            pass
 
 MODEL_MAP = {
     "gemini": Gemini,
     "openai": OpenAI,
+    "yolo": YoloProvider,
+    "simli": Simli,
 }
 
 AUDIO_PTIME = 0.02
@@ -83,9 +110,9 @@ class Connection:
         self.tools = tools
         self.voice = voice
         self.language = language
-        self.api_key = api_key
         self.video = "m=video" in sdp
-        self.avatar = avatar and self.video
+        has_simli = any(name.strip().startswith("simli") for name in model.split(";"))
+        self.avatar = has_simli and self.video
 
         is_webrtc = "fingerprint" in sdp
         from sip.peerconnection import SimplePeerConnection
@@ -115,6 +142,23 @@ class Connection:
             self.info("Track video added")
             self.send_video_track = SendingTrack("video")
             self.pc.addTrack(self.send_video_track)
+        else:
+            # Check if the client has a video track with recv direction (meaning client can receive video from us)
+            client_has_video_recv = False
+            for transceiver in self.pc.getTransceivers():
+                if transceiver.kind == "video":
+                    if transceiver.direction in ("sendonly", "sendrecv") or transceiver.currentDirection in (
+                        "sendonly",
+                        "sendrecv",
+                    ):
+                        client_has_video_recv = True
+                        break
+
+            has_yolo = any(name.strip().startswith("yolo") for name in model.split(";"))
+            if has_yolo and client_has_video_recv:
+                self.info("Track video added for YOLO overlay")
+                self.send_video_track = SendingTrack("video")
+                self.pc.addTrack(self.send_video_track)
 
         answer = await self.pc.createAnswer()
         await self.pc.setLocalDescription(answer)
@@ -137,12 +181,11 @@ class Connection:
 
     async def on_established(self):
         self.info("Connection established")
-
-        genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-        assert genai_session
         assert self.connected
 
-        await genai_session.send("Greet the user using language " + self.language)
+        for m in self.models:
+            if not isinstance(m, Simli) and not isinstance(m, YoloProvider):
+                await m.send("Greet the user using language " + self.language)
 
     async def call_tool(self, tool_name, tool_id, parameters):
         """Wrapper for tool calls that uses the provided tool_call func"""
@@ -164,9 +207,9 @@ class Connection:
             @channel.on("message")
             async def on_message(message):
                 self.last_message_time = time.time()
-                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-                if genai_session:
-                    await genai_session.send(message)
+                for m in self.models:
+                    if not isinstance(m, Simli):
+                        await m.send(message)
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -180,8 +223,8 @@ class Connection:
             if not self.connected and self.pc and self.pc.connectionState == "connected":
                 self.connected = True
 
-                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-                if genai_session:
+                has_genai = any(not isinstance(m, Simli) and not isinstance(m, YoloProvider) for m in self.models)
+                if has_genai:
                     await self.on_established()
 
         @self.pc.on("track")
@@ -220,10 +263,9 @@ class Connection:
                     # Ignore first 3 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
                     if time.time() - start_time < 3:
                         continue
-                    genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-                    if not genai_session:
-                        continue
-                    await genai_session.send(frame)
+                    for m in self.models:
+                        if not isinstance(m, Simli) and not isinstance(m, YoloProvider):
+                            await m.send(frame)
 
                 except Exception as e:
                     self.info("Error receiving frame: %s", e)
@@ -236,8 +278,8 @@ class Connection:
                 try:
                     frame = await self.recv_video_track.recv()
                     self.last_message_time = time.time()
-                    genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-                    if not genai_session:
+                    has_active_video_models = any(not isinstance(m, Simli) for m in self.models)
+                    if not has_active_video_models:
                         continue
 
                     # Limit the frame rate processed to 1 fps
@@ -246,6 +288,8 @@ class Connection:
                     last_frame_time = time.time()
 
                     image = frame.to_image()
+                    image.pts = frame.pts
+                    image.time_base = frame.time_base
 
                     if USE_VIDEO_BUFFER:
                         buffer.append(image)
@@ -257,20 +301,39 @@ class Connection:
                         for i in range(len(buffer)):
                             composite.paste(buffer[i], (image.width * i, 0))
 
-                        await genai_session.send(composite)
+                        for m in self.models:
+                            if not isinstance(m, Simli):
+                                await m.send(composite)
                     else:
-                        await genai_session.send(image)
+                        for m in self.models:
+                            if not isinstance(m, Simli):
+                                await m.send(image)
 
                 except Exception as e:
                     self.info("Error receiving frame: %s", e)
                     break
 
-        async def run_recv_genai():
+        first_video_frame = True
+
+        async def run_recv_genai(session):
+            nonlocal first_video_frame
             try:
-                genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
                 video_session = next((m for m in self.models if isinstance(m, Simli)), None)
-                while self.pc and self.pc.connectionState != "closed":
-                    async for frame in genai_session.recv():
+                async for frame in session.recv():
+                    if not self.pc or self.pc.connectionState == "closed":
+                        break
+                    if isinstance(frame, VideoFrame):
+                        if self.send_video_track:
+                            if first_video_frame:
+                                first_video_frame = False
+                                if self.data_channel and self.data_channel.readyState == "open":
+                                    try:
+                                        message = json.dumps({"type": "video_started"})
+                                        self.data_channel.send(message)
+                                    except Exception:
+                                        pass
+                            self.send_video_track.queue.put_nowait(frame)
+                    else:
                         if video_session:
                             asyncio.create_task(video_session.send_audio(frame))
                         else:
@@ -398,26 +461,42 @@ class Connection:
 
         try:
             # 1. Instantiate and connect models
-            model_class = None
-            for prefix, cls in MODEL_MAP.items():
-                if model.startswith(prefix):
-                    model_class = cls
-                    break
+            model_names = [s.strip() for s in model.split(";")]
+            for model_name in model_names:
+                model_class = None
+                for prefix, cls in MODEL_MAP.items():
+                    if model_name.startswith(prefix):
+                        model_class = cls
+                        break
 
-            if model_class:
-                m = model_class()
-                await m.connect(
-                    model, self.system_instructions, self.tools, self.call_tool, self.voice, self.language, self.api_key
-                )
-                self.models.append(m)
-
-            if self.avatar:
-                simli = Simli()
-                await simli.connect()
-                # Workaround to fix latency with simli
-                await simli.send_silence(10)
-                await simli.clear()
-                self.models.append(simli)
+                if model_class:
+                    if model_class == YoloProvider:
+                        draw_detections = (
+                            "draw" in model_name or "overlay" in model_name or "draw_detections" in model_name
+                        )
+                        m = YoloProvider(draw_detections=draw_detections)
+                        await m.connect(
+                            model_name,
+                            self.system_instructions,
+                            self.tools,
+                            self.call_tool,
+                            self.voice,
+                            self.language,
+                            self.api_key,
+                            connection=self,
+                        )
+                    else:
+                        m = model_class()
+                        await m.connect(
+                            model_name,
+                            self.system_instructions,
+                            self.tools,
+                            self.call_tool,
+                            self.voice,
+                            self.language,
+                            self.api_key,
+                        )
+                    self.models.append(m)
 
             # 2. Register event listeners for all models
             for m in self.models:
@@ -428,9 +507,9 @@ class Connection:
             self.info("Connected to models: %s", [type(m).__name__ for m in self.models])
 
             # 3. Start model-specific tasks
-            genai_session = next((m for m in self.models if not isinstance(m, Simli)), None)
-            if genai_session:
-                asyncio.ensure_future(run_recv_genai())
+            for m in self.models:
+                if not isinstance(m, Simli):
+                    asyncio.ensure_future(run_recv_genai(m))
 
             video_session = next((m for m in self.models if isinstance(m, Simli)), None)
             if video_session:

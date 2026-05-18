@@ -1,5 +1,6 @@
 import asyncio
 import os
+import argparse
 import aiohttp
 from dotenv import load_dotenv
 from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -9,8 +10,8 @@ from aiortc.contrib.media import MediaPlayer
 load_dotenv()
 
 
-async def run_client():
-    server_url = "http://localhost:8080/connection"
+async def run_client(port: int):
+    server_url = f"http://localhost:{port}/connection"
     google_api_key = os.getenv("GOOGLE_API_KEY")
 
     if not google_api_key:
@@ -50,7 +51,7 @@ async def run_client():
     # Payload for the proxy connection API
     payload = {
         "sdp": pc.localDescription.sdp,
-        "model": "gemini-2.5-flash-native-audio-latest",
+        "model": "gemini-2.5-flash-native-audio-latest;yolo",
         "system_instructions": "You are a helpful assistant. Please transcribe or answer any speech you hear.",
         "voice": "Puck",
         "language": "en-US",
@@ -97,4 +98,7 @@ async def run_client():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_client())
+    parser = argparse.ArgumentParser(description="WebRTC test client for live-proxy")
+    parser.add_argument("--port", type=int, default=8085, help="Port of the live-proxy server (default: 8085)")
+    args = parser.parse_args()
+    asyncio.run(run_client(args.port))

@@ -315,3 +315,23 @@ async function stop() {
 
 enumerateInputDevices();
 
+// Automatically enable video checkboxes when YOLO/Simli model is selected
+const handleModelChange = () => {
+  const modelSelect = document.getElementById('model');
+  if (!modelSelect) return;
+  
+  const val = modelSelect.value;
+  if (val.includes('yolo')) {
+    const sendVideo = document.getElementById('send-video');
+    const recvVideo = document.getElementById('recv-video');
+    if (sendVideo) sendVideo.checked = true;
+    if (recvVideo) recvVideo.checked = true;
+  } else if (val.includes('simli')) {
+    const recvVideo = document.getElementById('recv-video');
+    if (recvVideo) recvVideo.checked = true;
+  }
+};
+document.getElementById('model').addEventListener('change', handleModelChange);
+handleModelChange();
+
+

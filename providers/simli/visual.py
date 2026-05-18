@@ -39,11 +39,29 @@ class Simli(Model):
             rate=24000,
         )
 
-    async def connect(self, api_key: str = None, face_id: str = None):
-        log_info("Simli connect")
+    async def connect(
+        self,
+        model: str = None,
+        system_instructions=None,
+        tools=None,
+        tool_callback=None,
+        voice=None,
+        language=None,
+        api_key: str = None,
+        face_id: str = None,
+        **kwargs,
+    ):
+        log_info(f"Simli connect (model={model})")
 
-        self.api_key = api_key or os.getenv("SIMLI_API_KEY")
-        self.face_id = face_id or os.getenv("SIMLI_FACE_ID")
+        # Extract face_id from model name if formatted as simli/<face_id>
+        extracted_face_id = None
+        if model and "/" in model:
+            parts = model.split("/", 1)
+            if parts[0] == "simli":
+                extracted_face_id = parts[1]
+
+        self.api_key = os.getenv("SIMLI_API_KEY")
+        self.face_id = face_id or extracted_face_id or os.getenv("SIMLI_FACE_ID")
 
         if not self.api_key:
             raise ValueError("SIMLI_API_KEY is required")
