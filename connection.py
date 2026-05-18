@@ -110,6 +110,7 @@ class Connection:
         self.tools = tools
         self.voice = voice
         self.language = language
+        self.api_key = api_key
         self.video = "m=video" in sdp
         has_simli = any(name.strip().startswith("simli") for name in model.split(";"))
         self.avatar = has_simli and self.video
