@@ -475,7 +475,15 @@ class Connection:
                         draw_detections = (
                             "draw" in model_name or "overlay" in model_name or "draw_detections" in model_name
                         )
-                        m = YoloProvider(draw_detections=draw_detections)
+                        sampling_rate = 5
+                        for part in model.split(";"):
+                            part_clean = part.strip()
+                            if part_clean.startswith("sampling="):
+                                try:
+                                    sampling_rate = int(part_clean.split("=")[1])
+                                except ValueError:
+                                    pass
+                        m = YoloProvider(draw_detections=draw_detections, sampling_rate=sampling_rate)
                         await m.connect(
                             model_name,
                             self.system_instructions,

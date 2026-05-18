@@ -11,11 +11,14 @@ from model import Input, Model, Output
 
 
 class YoloProvider(Model):
-    def __init__(self, draw_detections: bool = False):
+    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5):
         super().__init__()
         self.model = None
         self.last_detections = set()
         self.draw_detections = draw_detections
+        self.sampling_rate = sampling_rate
+        self.frame_count = 0
+        self.last_drawn_boxes = []
         self.output_queue = asyncio.Queue()
         self.client_has_video_recv = False
 
@@ -93,27 +96,42 @@ class YoloProvider(Model):
         if not isinstance(input, Image):
             return
 
-        # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(None, lambda: self.model(input, verbose=False))
+        self.frame_count += 1
+        should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
 
-        if not results or len(results) == 0:
-            return
+        if should_process:
+            # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(None, lambda: self.model(input, verbose=False))
 
-        result = results[0]
-        detected = set()
-        if hasattr(result, "boxes") and result.boxes is not None:
-            for b in result.boxes:
-                if b.cls is not None:
-                    class_id = int(b.cls)
-                    if class_id in self.model.names:
-                        detected.add(self.model.names[class_id])
+            detected = set()
+            self.last_drawn_boxes = []
 
-        if detected != self.last_detections:
-            sorted_detections = sorted(list(detected))
-            log_info(f"YOLO detections changed: {sorted_detections}")
-            self.last_detections = detected
-            self._emit("detections_changed", sorted_detections)
+            if results and len(results) > 0:
+                result = results[0]
+                if hasattr(result, "boxes") and result.boxes is not None:
+                    for b in result.boxes:
+                        if b.cls is not None:
+                            class_id = int(b.cls)
+                            if class_id in self.model.names:
+                                label = self.model.names[class_id]
+                                detected.add(label)
+                                if hasattr(b, "xyxy") and b.xyxy is not None:
+                                    coords = b.xyxy[0].tolist()
+                                    conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
+                                    color = self.get_color(label)
+                                    self.last_drawn_boxes.append({
+                                        "coords": coords,
+                                        "label": label,
+                                        "conf": conf,
+                                        "color": color
+                                    })
+
+            if detected != self.last_detections:
+                sorted_detections = sorted(list(detected))
+                log_info(f"YOLO detections changed: {sorted_detections}")
+                self.last_detections = detected
+                self._emit("detections_changed", sorted_detections)
 
         # Overlay detections if enabled
         if self.overlay_enabled:
@@ -121,37 +139,30 @@ class YoloProvider(Model):
             drawn_image = input.copy()
             draw = ImageDraw.Draw(drawn_image)
 
-            if hasattr(result, "boxes") and result.boxes is not None:
-                for b in result.boxes:
-                    if b.cls is not None:
-                        class_id = int(b.cls)
-                        if class_id in self.model.names:
-                            label = self.model.names[class_id]
-                            if hasattr(b, "xyxy") and b.xyxy is not None:
-                                coords = b.xyxy[0].tolist()
-                                x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
-                                conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
+            for box in self.last_drawn_boxes:
+                coords = box["coords"]
+                label = box["label"]
+                conf = box["conf"]
+                color = box["color"]
+                x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
 
-                                # Stable, nice color per object type
-                                color = self.get_color(label)
+                # Draw nice bounding box
+                draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
 
-                                # Draw nice bounding box
-                                draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+                # Text label with confidence
+                text = f"{label} {conf:.2f}"
 
-                                # Text label with confidence
-                                text = f"{label} {conf:.2f}"
+                # Draw background box for text label
+                try:
+                    bbox = draw.textbbox((x1, y1), text)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                except AttributeError:
+                    tw, th = draw.textsize(text)
 
-                                # Draw background box for text label
-                                try:
-                                    bbox = draw.textbbox((x1, y1), text)
-                                    tw = bbox[2] - bbox[0]
-                                    th = bbox[3] - bbox[1]
-                                except AttributeError:
-                                    tw, th = draw.textsize(text)
-
-                                text_bg = [x1, max(0, y1 - th - 6), x1 + tw + 6, y1]
-                                draw.rectangle(text_bg, fill=color)
-                                draw.text((x1 + 3, max(0, y1 - th - 4)), text, fill=(255, 255, 255))
+                text_bg = [x1, max(0, y1 - th - 6), x1 + tw + 6, y1]
+                draw.rectangle(text_bg, fill=color)
+                draw.text((x1 + 3, max(0, y1 - th - 4)), text, fill=(255, 255, 255))
 
             new_frame = VideoFrame.from_image(drawn_image)
             if hasattr(input, "pts"):

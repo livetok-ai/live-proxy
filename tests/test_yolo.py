@@ -4,45 +4,36 @@ import numpy as np
 import fractions
 from providers.yolo.yolo import YoloProvider
 
+
 @pytest.mark.asyncio
 async def test_yolo_provider_init():
     """Test YoloProvider initialization and default attributes."""
     provider = YoloProvider()
     assert provider.model is None
 
+
 @pytest.mark.asyncio
 async def test_yolo_provider_connect():
     """Test YoloProvider connect and model loading."""
     provider = YoloProvider()
     await provider.connect(
-        model="yolo",
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None
+        model="yolo", system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
     )
     assert provider.model is not None
     await provider.close()
+
 
 @pytest.mark.asyncio
 async def test_yolo_provider_send_frame():
     """Test YoloProvider processing and logging of dummy frames."""
     provider = YoloProvider()
     await provider.connect(
-        model="yolo",
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None
+        model="yolo", system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
     )
-    
+
     # Create a 100x100 dummy black image
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-    
+
     # Sending frame should process successfully without throwing exceptions
     await provider.send(img)
     await provider.close()
@@ -75,10 +66,7 @@ async def test_yolo_provider_draw_detections():
     conn = DummyConnection([transceiver])
 
     provider = YoloProvider(draw_detections=True)
-    await provider.connect(
-        model="yolo",
-        connection=conn
-    )
+    await provider.connect(model="yolo", connection=conn)
     assert provider.overlay_enabled is True
 
     # Send a dummy frame
@@ -107,10 +95,45 @@ async def test_yolo_provider_draw_detections_disabled_by_direction():
     conn = DummyConnection([transceiver])
 
     provider = YoloProvider(draw_detections=True)
-    await provider.connect(
-        model="yolo",
-        connection=conn
-    )
+    await provider.connect(model="yolo", connection=conn)
     assert provider.overlay_enabled is False
     await provider.close()
 
+
+@pytest.mark.asyncio
+async def test_yolo_provider_sampling():
+    """Test YoloProvider frame sampling rate."""
+    transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
+    conn = DummyConnection([transceiver])
+
+    provider = YoloProvider(draw_detections=True, sampling_rate=5)
+    await provider.connect(model="yolo", connection=conn)
+    assert provider.overlay_enabled is True
+    assert provider.sampling_rate == 5
+
+    # Mock the actual YOLO model inference to count calls
+    call_count = 0
+
+    def dummy_model(input_img, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return []
+
+    provider.model = dummy_model
+
+    # Send 5 dummy frames
+    img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+    for i in range(5):
+        await provider.send(img)
+
+    # YOLO model should only be called once (the first frame)
+    assert call_count == 1
+    assert provider.frame_count == 5
+
+    # Send 6th frame
+    await provider.send(img)
+    # YOLO model should be called again (the 6th frame)
+    assert call_count == 2
+    assert provider.frame_count == 6
+
+    await provider.close()
