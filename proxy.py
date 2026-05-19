@@ -303,6 +303,10 @@ if __name__ == "__main__":
     else:
         ssl_context = None
 
+    # Load all scripts from scripts folder
+    from script_manager import load_all_scripts
+    load_all_scripts()
+
     asyncio.run(
         run_servers(
             args.host,

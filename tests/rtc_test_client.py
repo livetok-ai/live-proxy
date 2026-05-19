@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-async def run_client(port: int):
+async def run_client(port: int, model: str):
     server_url = f"http://localhost:{port}/connection"
     google_api_key = os.getenv("GOOGLE_API_KEY")
 
@@ -52,7 +52,7 @@ async def run_client(port: int):
     # Payload for the proxy connection API
     payload = {
         "sdp": pc.localDescription.sdp,
-        "model": "gemini-2.5-flash-native-audio-latest;yolo",
+        "model": model,
         "system_instructions": "You are a helpful assistant. Please transcribe or answer any speech you hear.",
         "voice": "Puck",
         "language": "en-US",
@@ -101,5 +101,11 @@ async def run_client(port: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WebRTC test client for live-proxy")
     parser.add_argument("--port", type=int, default=8085, help="Port of the live-proxy server (default: 8085)")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gemini-2.5-flash-native-audio-latest;yolo",
+        help="Model string to connect (default: gemini-2.5-flash-native-audio-latest;yolo)",
+    )
     args = parser.parse_args()
-    asyncio.run(run_client(args.port))
+    asyncio.run(run_client(args.port, args.model))

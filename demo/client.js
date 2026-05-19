@@ -109,7 +109,19 @@ function enumerateInputDevices() {
 }
 
 async function negotiate() {
-  const model = document.getElementById('model').value;
+  let model = document.getElementById('model').value;
+  if (document.getElementById('provider-simli')?.checked) {
+    model += ';simli';
+  }
+  if (document.getElementById('provider-yolo')?.checked) {
+    model += ';yolo-overlay';
+  }
+  if (document.getElementById('provider-face-sentiment')?.checked) {
+    model += ';face_sentiment-overlay';
+  }
+  if (document.getElementById('provider-text-sentiment')?.checked) {
+    model += ';text_sentiment';
+  }
   const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
@@ -315,23 +327,22 @@ async function stop() {
 
 enumerateInputDevices();
 
-// Automatically enable video checkboxes when YOLO/Simli model is selected
-const handleModelChange = () => {
-  const modelSelect = document.getElementById('model');
-  if (!modelSelect) return;
-  
-  const val = modelSelect.value;
-  if (val.includes('yolo')) {
+// Automatically enable video checkboxes when a video model provider is selected
+const handleProviderChange = () => {
+  const simliChecked = document.getElementById('provider-simli')?.checked;
+  const yoloChecked = document.getElementById('provider-yolo')?.checked;
+  const faceSentimentChecked = document.getElementById('provider-face-sentiment')?.checked;
+
+  if (simliChecked || yoloChecked || faceSentimentChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
     if (recvVideo) recvVideo.checked = true;
-  } else if (val.includes('simli')) {
-    const recvVideo = document.getElementById('recv-video');
-    if (recvVideo) recvVideo.checked = true;
   }
 };
-document.getElementById('model').addEventListener('change', handleModelChange);
-handleModelChange();
+
+document.getElementById('provider-simli')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-yolo')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-face-sentiment')?.addEventListener('change', handleProviderChange);
 
 

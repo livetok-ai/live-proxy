@@ -38,9 +38,11 @@ try:
     import metrics
     from logger import log_info
     from model import ModelEvents
+    from providers.face_sentiment.face_sentiment import FaceSentimentProvider
     from providers.gemini.llm import Gemini
     from providers.openai.llm import OpenAI
     from providers.simli.visual import Simli
+    from providers.text_sentiment.text_sentiment import TextSentimentProvider
     from providers.yolo.yolo import YoloProvider
 finally:
     if suppress_objc_warnings:
@@ -55,6 +57,8 @@ MODEL_MAP = {
     "openai": OpenAI,
     "yolo": YoloProvider,
     "simli": Simli,
+    "face_sentiment": FaceSentimentProvider,
+    "text_sentiment": TextSentimentProvider,
 }
 
 AUDIO_PTIME = 0.02
@@ -140,8 +144,9 @@ class Connection:
         await self.pc.setRemoteDescription(offer)
 
         has_yolo = any(name.strip().startswith("yolo") for name in model.split(";"))
-        if self.avatar or (has_yolo and avatar and self.video):
-            self.info(f"Track video added for {'Simli' if self.avatar else 'YOLO'}")
+        has_face_sentiment = any(name.strip().startswith("face_sentiment") for name in model.split(";"))
+        if self.avatar or ((has_yolo or has_face_sentiment) and avatar and self.video):
+            self.info(f"Track video added for {'Simli' if self.avatar else 'YOLO/FaceSentiment'}")
             self.send_video_track = SendingTrack("video")
             self.pc.addTrack(self.send_video_track)
         else:
@@ -156,8 +161,8 @@ class Connection:
                         client_has_video_recv = True
                         break
 
-            if has_yolo and client_has_video_recv:
-                self.info("Track video added for YOLO overlay")
+            if (has_yolo or has_face_sentiment) and client_has_video_recv:
+                self.info("Track video added for YOLO/FaceSentiment overlay")
                 self.send_video_track = SendingTrack("video")
                 self.pc.addTrack(self.send_video_track)
 
@@ -179,6 +184,15 @@ class Connection:
 
     def info(self, msg, *args):
         log_info(msg, *args, context=self.id)
+
+    def get_model(self, name: str):
+        model_class = MODEL_MAP.get(name)
+        if not model_class:
+            return None
+        for m in self.models:
+            if isinstance(m, model_class):
+                return m
+        return None
 
     async def on_established(self):
         self.info("Connection established")
@@ -293,9 +307,9 @@ class Connection:
                         last_llm_frame_time = now
 
                     for m in self.models:
-                        if isinstance(m, YoloProvider):
+                        if isinstance(m, YoloProvider) or isinstance(m, FaceSentimentProvider):
                             await m.send(image)
-                        elif not isinstance(m, Simli):
+                        elif not isinstance(m, Simli) and not isinstance(m, TextSentimentProvider):
                             if should_send_to_llm:
                                 if USE_VIDEO_BUFFER:
                                     buffer.append(image)
@@ -439,6 +453,9 @@ class Connection:
             if self.data_channel and self.data_channel.readyState == "open":
                 message = json.dumps({"type": "transcription", "role": "user", "content": input_transcription})
                 self.data_channel.send(message)
+            for m in self.models:
+                if hasattr(m, "handle_transcription"):
+                    asyncio.create_task(m.handle_transcription(input_transcription))
 
         def on_output_transcription(output_transcription):
             add_transcript("model", output_transcription)
@@ -471,7 +488,7 @@ class Connection:
                         break
 
                 if model_class:
-                    if model_class == YoloProvider:
+                    if model_class in (YoloProvider, FaceSentimentProvider):
                         draw_detections = (
                             "draw" in model_name or "overlay" in model_name or "draw_detections" in model_name
                         )
@@ -483,7 +500,7 @@ class Connection:
                                     sampling_rate = int(part_clean.split("=")[1])
                                 except ValueError:
                                     pass
-                        m = YoloProvider(draw_detections=draw_detections, sampling_rate=sampling_rate)
+                        m = model_class(draw_detections=draw_detections, sampling_rate=sampling_rate)
                         await m.connect(
                             model_name,
                             self.system_instructions,
@@ -514,6 +531,13 @@ class Connection:
                 m.on(ModelEvents.INTERRUPTED, on_interrupted)
 
             self.info("Connected to models: %s", [type(m).__name__ for m in self.models])
+
+            # Run setup on all loaded scripts
+            try:
+                from script_manager import run_setup
+                await run_setup(self)
+            except Exception as e:
+                self.info(f"Error running setup script: {e}")
 
             # 3. Start model-specific tasks
             for m in self.models:
@@ -555,6 +579,14 @@ class Connection:
 
     async def close(self):
         self.info("Closing connection")
+
+        if not getattr(self, "_teardown_called", False):
+            self._teardown_called = True
+            try:
+                from script_manager import run_teardown
+                await run_teardown(self)
+            except Exception as e:
+                self.info(f"Error running teardown script: {e}")
 
         if self.timeout_task:
             self.timeout_task.cancel()

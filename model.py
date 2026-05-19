@@ -20,6 +20,20 @@ class ModelEvents:
 class Model:
     def __init__(self):
         self._event_handlers = defaultdict(list)
+        self.input_enabled = True
+        self.output_enabled = True
+
+    def enable_input(self):
+        self.input_enabled = True
+
+    def disable_input(self):
+        self.input_enabled = False
+
+    def enable_output(self):
+        self.output_enabled = True
+
+    def disable_output(self):
+        self.output_enabled = False
 
     def on(self, event_type: str, handler: Callable[[Any], None]):
         """Register an event handler for the specified event type.
@@ -54,6 +68,11 @@ class Model:
                 handler(data)
             except Exception as e:
                 log_info(f"Error in event handler for {event_type}: {e}")
+
+    @classmethod
+    async def setup(cls):
+        """Perform any heavy initialization or model downloading needed before use."""
+        pass
 
     @abstractmethod
     async def send(self, _input: Input):

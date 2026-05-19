@@ -12,6 +12,33 @@ from model import Input, Model, Output
 
 
 class YoloProvider(Model):
+    _shared_model = None
+
+    @classmethod
+    async def setup(cls):
+        if cls._shared_model is not None:
+            return
+
+        # Locate yolo11n.pt model. First check local directory, then check examples folder
+        model_path = "yolo11n.pt"
+        possible_paths = [
+            model_path,
+            os.path.join(os.path.dirname(__file__), "yolo11n.pt"),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../examples/yolo11n.pt")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../examples/yolo11n.pt")),
+        ]
+
+        selected_path = model_path
+        for path in possible_paths:
+            if os.path.exists(path):
+                selected_path = path
+                break
+
+        log_info(f"Loading YOLO model from: {selected_path}")
+        # Load YOLO in thread pool since constructor or model loading might block
+        loop = asyncio.get_event_loop()
+        cls._shared_model = await loop.run_in_executor(None, lambda: YOLO(selected_path))
+
     def __init__(self, draw_detections: bool = False, sampling_rate: int = 5):
         super().__init__()
         self.model = None
@@ -75,25 +102,10 @@ class YoloProvider(Model):
             f"YOLO provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})"
         )
 
-        # Locate yolo11n.pt model. First check local directory, then check examples folder
-        model_path = "yolo11n.pt"
-        possible_paths = [
-            model_path,
-            os.path.join(os.path.dirname(__file__), "yolo11n.pt"),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../examples/yolo11n.pt")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../examples/yolo11n.pt")),
-        ]
+        if YoloProvider._shared_model is None:
+            await YoloProvider.setup()
 
-        selected_path = model_path
-        for path in possible_paths:
-            if os.path.exists(path):
-                selected_path = path
-                break
-
-        log_info(f"Loading YOLO model from: {selected_path}")
-        # Load YOLO in thread pool since constructor or model loading might block
-        loop = asyncio.get_event_loop()
-        self.model = await loop.run_in_executor(None, lambda: YOLO(selected_path))
+        self.model = YoloProvider._shared_model
 
     async def send(self, input: Input):
         if not self.model:
@@ -105,7 +117,7 @@ class YoloProvider(Model):
         self.frame_count += 1
         should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
 
-        if should_process:
+        if self.input_enabled and should_process:
             # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
             loop = asyncio.get_event_loop()
             results = await loop.run_in_executor(None, lambda: self.model(input, verbose=False))
@@ -135,9 +147,13 @@ class YoloProvider(Model):
                 log_info(f"YOLO detections changed: {sorted_detections}")
                 self.last_detections = detected
                 self._emit("detections_changed", sorted_detections)
+                self._emit("objects", sorted_detections)
+        elif not self.input_enabled:
+            self.last_drawn_boxes = []
+            self.last_detections = set()
 
-        # Overlay detections if enabled
-        if self.overlay_enabled:
+        # Overlay detections if enabled and output is enabled
+        if self.overlay_enabled and self.output_enabled:
             # Copy image to draw boxes on
             drawn_image = input.copy()
             draw = ImageDraw.Draw(drawn_image)

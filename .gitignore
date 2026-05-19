@@ -175,3 +175,7 @@ cython_debug/
 
 # JSON files in root
 /*.json
+
+# Model weights
+*.pt
+
