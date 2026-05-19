@@ -305,6 +305,7 @@ if __name__ == "__main__":
 
     # Load all scripts from scripts folder
     from script_manager import load_all_scripts
+
     load_all_scripts()
 
     asyncio.run(

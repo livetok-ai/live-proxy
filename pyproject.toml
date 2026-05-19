@@ -38,6 +38,7 @@ dependencies = [
     "nltk>=3.9.2",
     "simli-ai",
     "ultralytics>=8.4.51",
+    "quickjs-ng>=0.14.0",
 ]
 
 [project.optional-dependencies]

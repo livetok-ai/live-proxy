@@ -535,6 +535,7 @@ class Connection:
             # Run setup on all loaded scripts
             try:
                 from script_manager import run_setup
+
                 await run_setup(self)
             except Exception as e:
                 self.info(f"Error running setup script: {e}")
@@ -584,6 +585,7 @@ class Connection:
             self._teardown_called = True
             try:
                 from script_manager import run_teardown
+
                 await run_teardown(self)
             except Exception as e:
                 self.info(f"Error running teardown script: {e}")
