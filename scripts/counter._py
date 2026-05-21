@@ -1,11 +1,17 @@
 import logger
 
-def setup(connection):
+async def setup(connection):
+    # Add yolo and face_landmarker if not added yet
+    if not connection.get_model("yolo"):
+        await connection.add_model("yolo")
+    if not connection.get_model("face_landmarker"):
+        await connection.add_model("face_landmarker")
+
     yolo = connection.get_model("yolo")
-    landmark = connection.get_model("face_sentiment")
+    landmark = connection.get_model("face_landmarker")
     
     if yolo and landmark:
-        logger.log_info(f"[Counter Script] YOLO and Face Sentiment models found on connection {connection.id}")
+        logger.log_info(f"[Counter Script] YOLO and Face Landmarker models found on connection {connection.id}")
         
         # Initialize default state: YOLO processing & video output active; Landmarker fully inactive
         yolo.enable_input()
@@ -46,7 +52,7 @@ def setup(connection):
         connection._objects_handler = objects_detected
         connection._sentiment_handler = sentiment_detected
     else:
-        logger.log_info(f"[Counter Script] YOLO or Face Sentiment model not found on connection {connection.id}")
+        logger.log_info(f"[Counter Script] YOLO or Face Landmarker model not found on connection {connection.id}")
 
 def teardown(connection):
     # Log all counters
@@ -60,7 +66,7 @@ def teardown(connection):
     
     # Clean up event handlers
     yolo = connection.get_model("yolo")
-    landmark = connection.get_model("face_sentiment")
+    landmark = connection.get_model("face_landmarker")
     if yolo and hasattr(connection, "_objects_handler"):
         yolo.off("objects", connection._objects_handler)
     if landmark and hasattr(connection, "_sentiment_handler"):

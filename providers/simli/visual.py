@@ -21,10 +21,10 @@ AUDIO_PTIME = 0.02
 
 
 class Simli(Model):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.api_key = None
-        self.face_id = None
+        self.api_key = kwargs.get("api_key")
+        self.face_id = kwargs.get("face_id")
         self.client = None
         self.connected = False
         self.last_sent = time.time()
@@ -39,29 +39,27 @@ class Simli(Model):
             rate=24000,
         )
 
-    async def connect(
-        self,
-        model: str = None,
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key: str = None,
-        face_id: str = None,
-        **kwargs,
-    ):
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        name = name or model
+        extracted_face_id = None
+        if connection is not None and not isinstance(connection, str):
+            api_key = connection.api_key if hasattr(connection, "api_key") else None
+            # If name is model string, extract face_id if needed
+            if name and "/" in name:
+                parts = name.split("/", 1)
+                if parts[0] == "simli":
+                    extracted_face_id = parts[1]
+            model = name
+        else:
+            # If called via legacy test code or helper connect_simli(api_key, face_id)
+            api_key = name
+            extracted_face_id = connection
+            model = "simli"
+
         log_info(f"Simli connect (model={model})")
 
-        # Extract face_id from model name if formatted as simli/<face_id>
-        extracted_face_id = None
-        if model and "/" in model:
-            parts = model.split("/", 1)
-            if parts[0] == "simli":
-                extracted_face_id = parts[1]
-
-        self.api_key = os.getenv("SIMLI_API_KEY")
-        self.face_id = face_id or extracted_face_id or os.getenv("SIMLI_FACE_ID")
+        self.api_key = api_key or self.api_key or os.getenv("SIMLI_API_KEY")
+        self.face_id = extracted_face_id or self.face_id or os.getenv("SIMLI_FACE_ID")
 
         if not self.api_key:
             raise ValueError("SIMLI_API_KEY is required")
@@ -127,6 +125,42 @@ class Simli(Model):
                 yield frame
         except Exception as e:
             log_info(f"Error receiving video from Simli: {e}")
+
+    async def recv(self) -> AsyncIterator[Output]:
+        queue = asyncio.Queue()
+
+        async def stream_audio():
+            try:
+                async for frame in self.recv_audio():
+                    await queue.put(frame)
+            except Exception as e:
+                log_info(f"Simli recv_audio error: {e}")
+            finally:
+                await queue.put(None)
+
+        async def stream_video():
+            try:
+                async for frame in self.recv_video():
+                    await queue.put(frame)
+            except Exception as e:
+                log_info(f"Simli recv_video error: {e}")
+            finally:
+                await queue.put(None)
+
+        audio_task = asyncio.create_task(stream_audio())
+        video_task = asyncio.create_task(stream_video())
+
+        finished_tasks = 0
+        try:
+            while finished_tasks < 2:
+                item = await queue.get()
+                if item is None:
+                    finished_tasks += 1
+                else:
+                    yield item
+        finally:
+            audio_task.cancel()
+            video_task.cancel()
 
     async def clear(self):
         await self.client.clearBuffer()

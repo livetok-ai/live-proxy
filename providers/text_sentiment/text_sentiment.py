@@ -14,17 +14,8 @@ class TextSentimentProvider(Model):
         self.sia = None
         self.last_sentiment = None
 
-    async def connect(
-        self,
-        model: str,
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None,
-        **kwargs,
-    ):
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        model = name or model
         log_info(f"Connecting to Text Sentiment provider: {model}")
 
         # Download VADER lexicon if not already available

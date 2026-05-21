@@ -26,18 +26,12 @@ class OpenAI(Model):
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
 
-    async def connect(
-        self,
-        model: str,
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None,
-    ):
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        api_key = connection.api_key if connection else None
+        system_instructions = connection.system_instructions if connection else None
+        self.tool_callback = connection.call_tool if connection else None
+        model = name or model
         self.client = AsyncOpenAI(api_key=api_key)
-        self.tool_callback = tool_callback
 
         # Build the session config with optional system instructions
         session_config = {}

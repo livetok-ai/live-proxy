@@ -5,7 +5,7 @@ import pytest
 
 import script_manager
 from connection import Connection
-from providers.face_sentiment.face_sentiment import FaceSentimentProvider
+from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
 from providers.yolo.yolo import YoloProvider
 
 
@@ -39,7 +39,7 @@ class DummyYoloModel(YoloProvider):
         self.output_enabled = False
 
 
-class DummyFaceSentimentModel(FaceSentimentProvider):
+class DummyFaceLandmarkerModel(FaceLandmarkerProvider):
     def __init__(self):
         self.input_enabled = True
         self.output_enabled = True
@@ -115,19 +115,19 @@ async def test_get_model():
     conn = Connection()
 
     yolo_model = DummyYoloModel()
-    face_model = DummyFaceSentimentModel()
+    face_model = DummyFaceLandmarkerModel()
     conn.models = [yolo_model, face_model]
 
     assert conn.get_model("yolo") is yolo_model
-    assert conn.get_model("face_sentiment") is face_model
+    assert conn.get_model("face_landmarker") is face_model
     assert conn.get_model("nonexistent") is None
 
 
 @pytest.mark.asyncio
-async def test_yolo_face_sentiment_enable_disable():
-    """Test enable/disable methods and input/output flags on YOLO/FaceSentiment providers."""
+async def test_yolo_face_landmarker_enable_disable():
+    """Test enable/disable methods and input/output flags on YOLO/FaceLandmarker providers."""
     yolo = YoloProvider()
-    face = FaceSentimentProvider()
+    face = FaceLandmarkerProvider()
 
     assert yolo.input_enabled is True
     assert yolo.output_enabled is True
@@ -172,7 +172,7 @@ async def test_counter_script_logic():
     conn = Connection()
 
     yolo = DummyYoloModel()
-    landmark = DummyFaceSentimentModel()
+    landmark = DummyFaceLandmarkerModel()
 
     conn.models = [yolo, landmark]
 
@@ -181,7 +181,7 @@ async def test_counter_script_logic():
     counter_script = next(m for m in script_manager.LOADED_SCRIPTS if m.__name__ == "counter")
 
     # Run setup
-    counter_script.setup(conn)
+    await counter_script.setup(conn)
 
     # Check that handlers were registered
     assert "objects" in yolo._handlers
@@ -233,7 +233,7 @@ async def test_js_counter_script_logic():
     conn = Connection()
 
     yolo = DummyYoloModel()
-    landmark = DummyFaceSentimentModel()
+    landmark = DummyFaceLandmarkerModel()
 
     conn.models = [yolo, landmark]
 

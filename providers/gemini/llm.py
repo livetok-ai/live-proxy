@@ -42,16 +42,24 @@ class Gemini(Model):
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
 
-    async def connect(self, model, system_instructions, tools, tool_callback, voice, language, api_key):
-        log_info(f"Connecting to Gemini model: {model} vertexai: {USE_VERTEX_AI} tools: {len(tools) if tools else 0}")
-
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        model = name or model
         self.model = model
-        self.system_instructions = system_instructions
-        self.tools = tools
-        self.tool_callback = tool_callback
-        self.voice = voice
-        self.language = language
-        self.api_key = api_key
+        self.connection = connection
+        self.system_instructions = connection.system_instructions if connection else None
+        self.tools = connection.tools if connection else None
+        self.tool_callback = connection.call_tool if connection else None
+        self.voice = connection.voice if connection else None
+        self.language = connection.language if connection else None
+        self.api_key = connection.api_key if connection else None
+
+        system_instructions = self.system_instructions
+        tools = self.tools
+        voice = self.voice
+        language = self.language
+        api_key = self.api_key
+
+        log_info(f"Connecting to Gemini model: {self.model} vertexai: {USE_VERTEX_AI} tools: {len(self.tools) if self.tools else 0}")
 
         gemini_model = model
         if model and model.endswith("/cartesia"):
@@ -281,12 +289,7 @@ class Gemini(Model):
                     log_info(f"Reconnecting with handle {self.previous_session_handle}...")
                     await self.connect(
                         self.model,
-                        self.system_instructions,
-                        self.tools,
-                        self.tool_callback,
-                        self.voice,
-                        self.language,
-                        self.api_key,
+                        connection=self.connection,
                     )
         # Signal that session processing is done
         await output_queue.put(None)
@@ -360,7 +363,15 @@ async def connect_gemini(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
 ) -> AsyncGenerator[Gemini, None]:
     gemini = Gemini()
-    await gemini.connect(model, system_instructions, tools, tool_callback, voice, language, api_key)
+    class DummyConnection:
+        def __init__(self):
+            self.system_instructions = system_instructions
+            self.tools = tools
+            self.call_tool = tool_callback
+            self.voice = voice
+            self.language = language
+            self.api_key = api_key
+    await gemini.connect(model, connection=DummyConnection())
     try:
         yield gemini
     finally:

@@ -39,12 +39,20 @@ class YoloProvider(Model):
         loop = asyncio.get_event_loop()
         cls._shared_model = await loop.run_in_executor(None, lambda: YOLO(selected_path))
 
-    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5):
+    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5, **kwargs):
         super().__init__()
         self.model = None
         self.last_detections = set()
-        self.draw_detections = draw_detections
-        self.sampling_rate = sampling_rate
+
+        # Support draw and sampling keyword arguments
+        self.draw_detections = kwargs.get("draw", draw_detections)
+        if isinstance(self.draw_detections, (int, str)):
+            self.draw_detections = bool(int(self.draw_detections)) if str(self.draw_detections).isdigit() else (str(self.draw_detections).lower() == 'true')
+
+        self.sampling_rate = kwargs.get("sampling", sampling_rate)
+        if isinstance(self.sampling_rate, (int, str)):
+            self.sampling_rate = int(self.sampling_rate)
+
         self.frame_count = 0
         self.last_drawn_boxes = []
         self.output_queue = asyncio.Queue()
@@ -73,21 +81,11 @@ class YoloProvider(Model):
             h = (h * 31 + ord(char)) & 0xFFFFFFFF
         return colors[h % len(colors)]
 
-    async def connect(
-        self,
-        model: str,
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None,
-        **kwargs,
-    ):
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        model = name or model
         log_info(f"Connecting to YOLO provider: {model}")
 
         # Check if the video track has recv direction from client side
-        connection = kwargs.get("connection")
         self.client_has_video_recv = False
         if connection and connection.pc:
             for transceiver in connection.pc.getTransceivers():

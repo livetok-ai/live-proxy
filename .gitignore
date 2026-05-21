@@ -176,6 +176,10 @@ cython_debug/
 # JSON files in root
 /*.json
 
+# Large model binaries
+*.pt
+*.task
+
 # Model weights
 *.pt
 

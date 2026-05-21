@@ -38,6 +38,7 @@ class JavaScriptScript:
         ctx.add_callable("py_log", py_log)
         ctx.add_callable("py_connection_get_id", lambda: connection.id)
         ctx.add_callable("py_connection_has_model", lambda name: connection.get_model(name) is not None)
+        ctx.add_callable("py_connection_add_model", lambda name: connection.add_model_sync(name))
 
         def py_model_enable_input(name):
             m = connection.get_model(name)
@@ -150,6 +151,10 @@ class JavaScriptScript:
                     this._models[name] = new ModelWrapper(name);
                 }
                 return this._models[name];
+            }
+            add_model(name) {
+                py_connection_add_model(name);
+                return this.get_model(name);
             }
         }
         const connection = new ConnectionWrapper();

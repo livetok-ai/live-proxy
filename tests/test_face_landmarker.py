@@ -5,28 +5,28 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from providers.face_sentiment.face_sentiment import FaceSentimentProvider
+from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
 
 
 @pytest.mark.asyncio
-async def test_face_sentiment_provider_init():
-    """Test FaceSentimentProvider initialization and default attributes."""
-    provider = FaceSentimentProvider()
+async def test_face_landmarker_provider_init():
+    """Test FaceLandmarkerProvider initialization and default attributes."""
+    provider = FaceLandmarkerProvider()
     assert provider.detector is None
     assert provider.last_emotion is None
 
 
 @pytest.mark.asyncio
-async def test_face_sentiment_provider_connect():
-    """Test FaceSentimentProvider connect and model loading (mocked)."""
-    provider = FaceSentimentProvider()
+async def test_face_landmarker_provider_connect():
+    """Test FaceLandmarkerProvider connect and model loading (mocked)."""
+    provider = FaceLandmarkerProvider()
 
     with patch("os.path.exists", return_value=True), patch(
-        "providers.face_sentiment.face_sentiment.FaceSentimentProvider._load_detector"
+        "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
         await provider.connect(
-            model="face_sentiment",
+            model="face_landmarker",
             system_instructions=None,
             tools=None,
             tool_callback=None,
@@ -41,15 +41,15 @@ async def test_face_sentiment_provider_connect():
 
 
 @pytest.mark.asyncio
-async def test_face_sentiment_provider_send_frame():
-    """Test FaceSentimentProvider processing frames and detecting emotion."""
-    provider = FaceSentimentProvider()
+async def test_face_landmarker_provider_send_frame():
+    """Test FaceLandmarkerProvider processing frames and detecting emotion."""
+    provider = FaceLandmarkerProvider()
 
     # Setup mock detector
     provider.detector = MagicMock()
 
     # Mock _process_frame to return a mock result
-    with patch("providers.face_sentiment.face_sentiment.FaceSentimentProvider._process_frame") as mock_process:
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
         mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
 
         # Create a 100x100 dummy black image
@@ -82,18 +82,18 @@ class DummyConnection:
 
 
 @pytest.mark.asyncio
-async def test_face_sentiment_provider_draw_detections():
-    """Test FaceSentimentProvider draws detections and yields VideoFrames when enabled."""
+async def test_face_landmarker_provider_draw_detections():
+    """Test FaceLandmarkerProvider draws detections and yields VideoFrames when enabled."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceSentimentProvider(draw_detections=True)
+    provider = FaceLandmarkerProvider(draw_detections=True)
 
     with patch("os.path.exists", return_value=True), patch(
-        "providers.face_sentiment.face_sentiment.FaceSentimentProvider._load_detector"
+        "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
-        await provider.connect(model="face_sentiment", connection=conn)
+        await provider.connect(model="face_landmarker", connection=conn)
         assert provider.overlay_enabled is True
 
     # Send a dummy frame with a mocked result
@@ -101,7 +101,7 @@ async def test_face_sentiment_provider_draw_detections():
     img.pts = 12345
     img.time_base = fractions.Fraction(1, 30)
 
-    with patch("providers.face_sentiment.face_sentiment.FaceSentimentProvider._process_frame") as mock_process:
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
         mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
         await provider.send(img)
 
@@ -117,18 +117,18 @@ async def test_face_sentiment_provider_draw_detections():
 
 
 @pytest.mark.asyncio
-async def test_face_sentiment_provider_sampling():
-    """Test FaceSentimentProvider frame sampling rate."""
+async def test_face_landmarker_provider_sampling():
+    """Test FaceLandmarkerProvider frame sampling rate."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceSentimentProvider(draw_detections=True, sampling_rate=5)
+    provider = FaceLandmarkerProvider(draw_detections=True, sampling_rate=5)
 
     with patch("os.path.exists", return_value=True), patch(
-        "providers.face_sentiment.face_sentiment.FaceSentimentProvider._load_detector"
+        "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
-        await provider.connect(model="face_sentiment", connection=conn)
+        await provider.connect(model="face_landmarker", connection=conn)
         assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 

@@ -12,13 +12,52 @@ from logger import log_info
 from model import Input, Model, Output
 
 
-class FaceSentimentProvider(Model):
-    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5):
+class FaceLandmarkerProvider(Model):
+    _shared_model_path = None
+
+    @classmethod
+    async def setup(cls):
+        if cls._shared_model_path is not None and os.path.exists(cls._shared_model_path):
+            return
+
+        import urllib.request
+        model_name = "face_landmarker.task"
+        possible_paths = [
+            model_name,
+            os.path.join(os.path.dirname(__file__), model_name),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), f"../../../{model_name}")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), f"../../{model_name}")),
+        ]
+
+        cls._shared_model_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                cls._shared_model_path = path
+                break
+
+        if not cls._shared_model_path:
+            cls._shared_model_path = os.path.join(os.path.dirname(__file__), model_name)
+            log_info(f"Downloading face_landmarker.task to {cls._shared_model_path}")
+            url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+
+            # Download in an executor to avoid blocking the main event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: urllib.request.urlretrieve(url, cls._shared_model_path))
+
+        log_info(f"Face Landmarker setup complete: {cls._shared_model_path}")
+
+    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5, **kwargs):
         super().__init__()
         self.detector = None
         self.last_emotion = None
-        self.draw_detections = draw_detections
-        self.sampling_rate = sampling_rate
+        self.draw_detections = kwargs.get("draw", draw_detections)
+        if isinstance(self.draw_detections, (int, str)):
+            self.draw_detections = bool(int(self.draw_detections)) if str(self.draw_detections).isdigit() else (str(self.draw_detections).lower() == 'true')
+
+        self.sampling_rate = kwargs.get("sampling", sampling_rate)
+        if isinstance(self.sampling_rate, (int, str)):
+            self.sampling_rate = int(self.sampling_rate)
+
         self.frame_count = 0
         self.last_drawn_boxes = []
         self.output_queue = asyncio.Queue()
@@ -40,21 +79,11 @@ class FaceSentimentProvider(Model):
         }
         return colors.get(label, (0, 206, 209))
 
-    async def connect(
-        self,
-        model: str,
-        system_instructions=None,
-        tools=None,
-        tool_callback=None,
-        voice=None,
-        language=None,
-        api_key=None,
-        **kwargs,
-    ):
-        log_info(f"Connecting to Face Sentiment provider: {model}")
+    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
+        model = name or model
+        log_info(f"Connecting to Face Landmarker provider: {model}")
 
         # Check if the video track has recv direction from client side
-        connection = kwargs.get("connection")
         self.client_has_video_recv = False
         if connection and connection.pc:
             for transceiver in connection.pc.getTransceivers():
@@ -66,33 +95,13 @@ class FaceSentimentProvider(Model):
                         self.client_has_video_recv = True
                         break
         log_info(
-            f"Face Sentiment provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})"
+            f"Face Landmarker provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})"
         )
 
-        # Locate face_landmarker.task model. First check local directory, then check parent dirs
-        model_name = "face_landmarker.task"
-        possible_paths = [
-            model_name,
-            os.path.join(os.path.dirname(__file__), model_name),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), f"../../../{model_name}")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), f"../../{model_name}")),
-        ]
+        if FaceLandmarkerProvider._shared_model_path is None or not os.path.exists(FaceLandmarkerProvider._shared_model_path):
+            await FaceLandmarkerProvider.setup()
 
-        self.model_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                self.model_path = path
-                break
-
-        if not self.model_path:
-            self.model_path = os.path.join(os.path.dirname(__file__), model_name)
-            log_info(f"Downloading face_landmarker.task to {self.model_path}")
-            url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-
-            # Download in an executor to avoid blocking the main event loop
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, lambda: urllib.request.urlretrieve(url, self.model_path))
-
+        self.model_path = FaceLandmarkerProvider._shared_model_path
         log_info(f"Loading MediaPipe Face Landmarker model from: {self.model_path}")
 
         loop = asyncio.get_event_loop()
@@ -263,5 +272,5 @@ class FaceSentimentProvider(Model):
                 yield
 
     async def close(self):
-        log_info("Closing Face Sentiment provider")
+        log_info("Closing Face Landmarker provider")
         self.detector = None

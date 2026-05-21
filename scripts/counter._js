@@ -2,11 +2,18 @@ let objects_handler = null;
 let sentiment_handler = null;
 
 function setup(connection) {
+    if (!connection.get_model("yolo")) {
+        connection.add_model("yolo");
+    }
+    if (!connection.get_model("face_landmarker")) {
+        connection.add_model("face_landmarker");
+    }
+
     const yolo = connection.get_model("yolo");
-    const landmark = connection.get_model("face_sentiment");
+    const landmark = connection.get_model("face_landmarker");
     
     if (yolo && landmark) {
-        logger.log_info("[Counter Script] YOLO and Face Sentiment models found on connection " + connection.id);
+        logger.log_info("[Counter Script] YOLO and Face Landmarker models found on connection " + connection.id);
         
         // Initialize default state: YOLO processing & video output active; Landmarker fully inactive
         yolo.enable_input();
@@ -47,7 +54,7 @@ function setup(connection) {
         yolo.on("objects", objects_handler);
         landmark.on("sentiment", sentiment_handler);
     } else {
-        logger.log_info("[Counter Script] YOLO or Face Sentiment model not found on connection " + connection.id);
+        logger.log_info("[Counter Script] YOLO or Face Landmarker model not found on connection " + connection.id);
     }
 }
 
@@ -64,7 +71,7 @@ function teardown(connection) {
     
     // Clean up event handlers
     const yolo = connection.get_model("yolo");
-    const landmark = connection.get_model("face_sentiment");
+    const landmark = connection.get_model("face_landmarker");
     if (yolo && objects_handler) {
         yolo.off("objects", objects_handler);
     }

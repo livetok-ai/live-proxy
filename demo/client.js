@@ -116,8 +116,8 @@ async function negotiate() {
   if (document.getElementById('provider-yolo')?.checked) {
     model += ';yolo-overlay';
   }
-  if (document.getElementById('provider-face-sentiment')?.checked) {
-    model += ';face_sentiment-overlay';
+  if (document.getElementById('provider-face-landmarker')?.checked) {
+    model += ';face_landmarker-overlay';
   }
   if (document.getElementById('provider-text-sentiment')?.checked) {
     model += ';text_sentiment';
@@ -331,9 +331,9 @@ enumerateInputDevices();
 const handleProviderChange = () => {
   const simliChecked = document.getElementById('provider-simli')?.checked;
   const yoloChecked = document.getElementById('provider-yolo')?.checked;
-  const faceSentimentChecked = document.getElementById('provider-face-sentiment')?.checked;
+  const faceLandmarkerChecked = document.getElementById('provider-face-landmarker')?.checked;
 
-  if (simliChecked || yoloChecked || faceSentimentChecked) {
+  if (simliChecked || yoloChecked || faceLandmarkerChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
@@ -343,6 +343,6 @@ const handleProviderChange = () => {
 
 document.getElementById('provider-simli')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-yolo')?.addEventListener('change', handleProviderChange);
-document.getElementById('provider-face-sentiment')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-face-landmarker')?.addEventListener('change', handleProviderChange);
 
 
