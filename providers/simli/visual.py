@@ -21,10 +21,34 @@ AUDIO_PTIME = 0.02
 
 
 class Simli(Model):
-    def __init__(self, **kwargs):
-        super().__init__()
+    @property
+    def supports_audio(self) -> bool:
+        return True
+
+    @property
+    def video_support(self) -> bool:
+        return True
+
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
         self.api_key = kwargs.get("api_key")
         self.face_id = kwargs.get("face_id")
+
+        # Check if name is model string, extract face_id if needed
+        # e.g., name="simli/face_id_xyz" or name="simli"
+        model_name = name or kwargs.get("model")
+        if model_name and "/" in model_name:
+            parts = model_name.split("/", 1)
+            if parts[0] == "simli":
+                self.face_id = parts[1]
+
+        if connection is not None and not isinstance(connection, str):
+            if hasattr(connection, "api_key"):
+                self.api_key = connection.api_key
+
+        self.api_key = self.api_key or os.getenv("SIMLI_API_KEY")
+        self.face_id = self.face_id or os.getenv("SIMLI_FACE_ID")
+
         self.client = None
         self.connected = False
         self.last_sent = time.time()
@@ -38,43 +62,20 @@ class Simli(Model):
             layout="mono",
             rate=24000,
         )
+        log_info(f"Simli provider face_id={self.face_id}")
 
-    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
-        name = name or model
-        extracted_face_id = None
-        if connection is not None and not isinstance(connection, str):
-            api_key = connection.api_key if hasattr(connection, "api_key") else None
-            # If name is model string, extract face_id if needed
-            if name and "/" in name:
-                parts = name.split("/", 1)
-                if parts[0] == "simli":
-                    extracted_face_id = parts[1]
-            model = name
-        else:
-            # If called via legacy test code or helper connect_simli(api_key, face_id)
-            api_key = name
-            extracted_face_id = connection
-            model = "simli"
-
-        log_info(f"Simli connect (model={model})")
-
-        self.api_key = api_key or self.api_key or os.getenv("SIMLI_API_KEY")
-        self.face_id = extracted_face_id or self.face_id or os.getenv("SIMLI_FACE_ID")
+    async def connect(self):
 
         if not self.api_key:
             raise ValueError("SIMLI_API_KEY is required")
         if not self.face_id:
             raise ValueError("SIMLI_FACE_ID is required")
 
-        log_info(f"Connecting to Simli with face_id: {self.face_id}")
-
         config = SimliConfig(faceId=self.face_id, maxSessionLength=300, maxIdleTime=60, model="fasttalk")
 
         self.client = SimliClient(self.api_key, config)
         await self.client.start()
         self.connected = True
-
-        log_info("Connected to Simli")
 
         # Workaround to fix latency with simli
         await self.send_silence(10)
@@ -175,8 +176,8 @@ class Simli(Model):
 
 @contextlib.asynccontextmanager
 async def connect_simli(api_key: str = None, face_id: str = None) -> AsyncGenerator[Simli, None]:
-    simli = Simli()
-    await simli.connect(api_key, face_id)
+    simli = Simli(name="simli", connection=None, api_key=api_key, face_id=face_id)
+    await simli.connect()
     try:
         yield simli
     finally:

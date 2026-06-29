@@ -9,16 +9,13 @@ from model import Input, Model, Output
 
 
 class TextSentimentProvider(Model):
-    def __init__(self):
-        super().__init__()
-        self.sia = None
-        self.last_sentiment = None
+    @property
+    def supports_text(self) -> bool:
+        return True
 
-    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
-        model = name or model
-        log_info(f"Connecting to Text Sentiment provider: {model}")
+    @classmethod
+    async def setup(cls):
 
-        # Download VADER lexicon if not already available
         try:
             nltk.data.find("sentiment/vader_lexicon.zip")
         except LookupError:
@@ -26,6 +23,18 @@ class TextSentimentProvider(Model):
             # Download in an executor to avoid blocking the main event loop
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, lambda: nltk.download("vader_lexicon", quiet=True))
+
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
+        self.sia = None
+        self.last_sentiment = None
+        self.model = kwargs.get("model") or name
+        log_info(f"Text Sentiment provider model: {self.model}")
+
+    async def connect(self):
+
+        # Download VADER lexicon if not already available
+        await TextSentimentProvider.setup()
 
         self.sia = SentimentIntensityAnalyzer()
 

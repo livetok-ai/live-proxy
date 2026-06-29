@@ -12,6 +12,7 @@ from PIL.Image import Image
 from logger import log_info
 from model import Input, Model, ModelEvents, Output
 from providers.cartesia.tts import CartesiaTTS
+from utils import parse_bool, parse_int
 
 SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
@@ -19,21 +20,54 @@ USE_VERTEX_AI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true
 
 
 class Gemini(Model):
-    def __init__(self):
-        super().__init__()
-        self.model = None
-        self.system_instructions = None
-        self.tools = None
-        self.tool_callback = None
-        self.voice = None
-        self.language = None
-        self.api_key = None
+    @property
+    def is_llm(self) -> bool:
+        return True
+
+    @property
+    def supports_audio(self) -> bool:
+        return True
+
+    @property
+    def supports_text(self) -> bool:
+        return True
+
+    @property
+    def supports_video(self) -> bool:
+        return False
+
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
+        self.model = kwargs.get("model") or name
+        if self.model and self.model.endswith("/cartesia"):
+            self.model = self.model.replace("/cartesia", "")
+
+        self.system_instructions = connection.system_instructions if connection else None
+        self.tools = {}
+        if connection and connection.tools:
+            for tool in connection.tools:
+                self.tools[tool["name"]] = (tool, None)
+        self.tool_callback = connection.call_tool if connection else None
+        self.voice = connection.voice if connection else None
+        self.language = connection.language if connection else None
+        self.api_key = connection.api_key if connection else None
 
         self.tts = None
         self.client = None
         self.session = None
         self.session_context = None
         self.previous_session_handle = None
+        self.is_closing = False
+        self.reconnect_attempts = 0
+
+        # Support sampling and use_video_buffer parameters only from kwargs
+        self.sampling_rate = parse_int(kwargs.get("sampling"), 30)
+        self.use_video_buffer = parse_bool(kwargs.get("use_video_buffer"), False)
+
+        self.frame_count = 0
+        from utils import VideoBuffer
+
+        self.video_buffer = VideoBuffer(max_size=10)
 
         self.resampler = AudioResampler(
             format="s16",
@@ -41,29 +75,32 @@ class Gemini(Model):
             rate=SAMPLE_RATE,
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
+        log_info(
+            f"Gemini provider model: {self.model} vertexai: {USE_VERTEX_AI} tools: {len(self.tools) if self.tools else 0} sampling: {self.sampling_rate} use_video_buffer: {self.use_video_buffer}"
+        )
 
-    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
-        model = name or model
-        self.model = model
-        self.connection = connection
-        self.system_instructions = connection.system_instructions if connection else None
-        self.tools = connection.tools if connection else None
-        self.tool_callback = connection.call_tool if connection else None
-        self.voice = connection.voice if connection else None
-        self.language = connection.language if connection else None
-        self.api_key = connection.api_key if connection else None
+    async def disconnect_session(self):
+        if self.session_context is not None:
+            try:
+                await self.session_context.__aexit__(None, None, None)
+            except Exception as e:
+                log_info(f"Error exiting session context: {e}")
+            self.session_context = None
+        self.session = None
 
+    async def connect(self):
+        await self.disconnect_session()
+        self.is_closing = False
         system_instructions = self.system_instructions
-        tools = self.tools
+        tools = [tool_dict for tool_dict, _ in self.tools.values()]
         voice = self.voice
         language = self.language
         api_key = self.api_key
+        model = self.model
 
-        log_info(f"Connecting to Gemini model: {self.model} vertexai: {USE_VERTEX_AI} tools: {len(self.tools) if self.tools else 0}")
-
-        gemini_model = model
-        if model and model.endswith("/cartesia"):
-            gemini_model = model.replace("/cartesia", "")
+        gemini_model = self.model
+        if self.model and self.model.endswith("/cartesia"):
+            gemini_model = self.model.replace("/cartesia", "")
             if not self.tts and os.getenv("CARTESIA_API_KEY"):
                 self.tts = CartesiaTTS()
 
@@ -127,6 +164,7 @@ class Gemini(Model):
             input_audio_transcription=genai.types.AudioTranscriptionConfig(),
             output_audio_transcription=genai.types.AudioTranscriptionConfig(),
             session_resumption=(genai.types.SessionResumptionConfig(handle=self.previous_session_handle)),
+            thinking_config=genai.types.ThinkingConfig(thinking_level="low"),
         )
 
         if USE_VERTEX_AI:
@@ -149,8 +187,6 @@ class Gemini(Model):
         if self.tts and not self.tts.connected:
             await self.tts.connect()
 
-        log_info(f"Connected to Gemini model: {model}")
-
     async def interrupt(self):
         self._emit(ModelEvents.INTERRUPTED)
         if self.tts:
@@ -171,14 +207,113 @@ class Gemini(Model):
                         )
                     )
             elif isinstance(input, Image):
+                self.frame_count += 1
+                should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
+                if not should_process:
+                    return
+
+                if self.use_video_buffer:
+                    input = self.video_buffer.add_and_composite(input)
+
                 await self.session.send_realtime_input(video=input)
         except Exception as e:
-            log_info(f"Error sending input: {e}")
+            if not self.is_closing:
+                log_info(f"Error sending input: {e}")
+                self.session = None
+                if self.session_context:
+                    try:
+                        await self.session_context.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+
+    async def send_info(self, info: str):
+        if not self.session:
+            return
+        try:
+            log_info(f"Sending info to Gemini: {info}")
+            await self.session.send_client_content(
+                turns=genai.types.Content(
+                    role="user",
+                    parts=[genai.types.Part(text=info)],
+                ),
+                turn_complete=False,
+            )
+        except Exception as e:
+            if not self.is_closing:
+                log_info(f"Error sending info: {e}")
+                self.session = None
+                if self.session_context:
+                    try:
+                        await self.session_context.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+
+    def _convert_params_list_to_schema(self, params_list):
+        properties = {}
+        required = []
+        for param in params_list:
+            name = param.get("name")
+            p_type = param.get("type", "string").upper()
+            if p_type == "STRING":
+                p_type = "STRING"
+            elif p_type == "NUMBER":
+                p_type = "NUMBER"
+            elif p_type == "BOOLEAN":
+                p_type = "BOOLEAN"
+            elif p_type == "INTEGER":
+                p_type = "INTEGER"
+            else:
+                p_type = "STRING"
+
+            p_desc = param.get("description", "")
+
+            properties[name] = {
+                "type": p_type,
+            }
+            if p_desc:
+                properties[name]["description"] = p_desc
+
+            required.append(name)
+
+        return {"type": "OBJECT", "properties": properties, "required": required}
+
+    def add_tool(self, tool_dict, callback):
+        name = tool_dict["name"]
+
+        parameters = tool_dict.get("parameters")
+        if isinstance(parameters, list):
+            parameters = self._convert_params_list_to_schema(parameters)
+
+        genai_tool = {"name": name, "description": tool_dict.get("description", ""), "parameters": parameters}
+        self.tools[name] = (genai_tool, callback)
+
+        if self.session and getattr(self, "connection", None):
+            log_info(f"Reconnecting Gemini to apply new tool: {name}")
+
+            async def do_reconnect():
+                await self.close()
+                await self.connect()
+
+            asyncio.create_task(do_reconnect())
 
     async def _handle_tool_call(self, event):
         function_responses = []
         for fc in event.tool_call.function_calls:
-            if self.tool_callback:
+            if fc.name in self.tools:
+                _, callback = self.tools[fc.name]
+                try:
+                    if callback:
+                        if asyncio.iscoroutinefunction(callback):
+                            result = await callback(fc.args)
+                        else:
+                            result = callback(fc.args)
+                    elif self.tool_callback:
+                        result = await self.tool_callback(fc.name, fc.id, fc.args)
+                    else:
+                        result = {"error": "No tool callback available"}
+                except Exception as e:
+                    result = {"error": str(e)}
+            elif self.tool_callback:
                 result = await self.tool_callback(fc.name, fc.id, fc.args)
             else:
                 result = {"error": "No tool callback available"}
@@ -202,13 +337,14 @@ class Gemini(Model):
                 received = self.session.receive()
                 async for event in received:
                     if event.server_content:
+                        # log_info(f"Event ${event}")
                         if event.server_content.model_turn:
                             # log_info(f"Received model turn: {event.server_content.model_turn}")
                             text = event.server_content.model_turn.parts[0].text
                             if text:
                                 self._emit(
                                     ModelEvents.OUTPUT_TRANSCRIPTION,
-                                    text,
+                                    {"text": text, "final": False},
                                 )
 
                                 # log_info(f"Received model turn: {text")
@@ -236,13 +372,13 @@ class Gemini(Model):
                             await self.interrupt()
                             self._emit(
                                 ModelEvents.INPUT_TRANSCRIPTION,
-                                event.server_content.input_transcription.text,
+                                {"text": event.server_content.input_transcription.text, "final": False},
                             )
                         if event.server_content.output_transcription and event.server_content.output_transcription.text:
                             log_info(f"Output audio transcription: {event.server_content.output_transcription}")
                             self._emit(
                                 ModelEvents.OUTPUT_TRANSCRIPTION,
-                                event.server_content.output_transcription.text,
+                                {"text": event.server_content.output_transcription.text, "final": False},
                             )
 
                     if event.usage_metadata:
@@ -283,14 +419,31 @@ class Gemini(Model):
                             self.previous_session_handle = update.new_handle
 
             except Exception as e:
+                if self.is_closing:
+                    break
+
                 log_info(f"Error processing session events: {e}.")
 
-                if self.session:
-                    log_info(f"Reconnecting with handle {self.previous_session_handle}...")
-                    await self.connect(
-                        self.model,
-                        connection=self.connection,
+                # Try to reconnect up to 3 times
+                reconnected = False
+                while self.reconnect_attempts < 3:
+                    self.reconnect_attempts += 1
+                    log_info(
+                        f"Reconnecting with handle {self.previous_session_handle} (attempt {self.reconnect_attempts})..."
                     )
+                    try:
+                        await self.connect()
+                        reconnected = True
+                        break
+                    except Exception as conn_err:
+                        log_info(f"Reconnection attempt {self.reconnect_attempts} failed: {conn_err}")
+                        await asyncio.sleep(2)
+
+                if not reconnected:
+                    log_info("Failed to reconnect Gemini session after 3 attempts. Closing connection.")
+                    if self.connection:
+                        asyncio.create_task(self.connection.close())
+                    break
         # Signal that session processing is done
         await output_queue.put(None)
 
@@ -338,20 +491,14 @@ class Gemini(Model):
 
     async def close(self):
         log_info("Closing Gemini session")
+        self.is_closing = True
 
         # Close both session and tts in parallel
-        close_tasks = []
-
-        if self.session_context is not None:
-            close_tasks.append(self.session_context.__aexit__(None, None, None))
+        close_tasks = [self.disconnect_session()]
 
         if self.tts is not None:
             close_tasks.append(self.tts.close())
-
-        # Mark as closing
-        self.session = None
-        self.session_context = None
-        self.tts = None
+            self.tts = None
 
         # Wait for all close operations to complete
         if close_tasks:
@@ -362,7 +509,6 @@ class Gemini(Model):
 async def connect_gemini(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
 ) -> AsyncGenerator[Gemini, None]:
-    gemini = Gemini()
     class DummyConnection:
         def __init__(self):
             self.system_instructions = system_instructions
@@ -371,7 +517,9 @@ async def connect_gemini(
             self.voice = voice
             self.language = language
             self.api_key = api_key
-    await gemini.connect(model, connection=DummyConnection())
+
+    gemini = Gemini(name=model, connection=DummyConnection())
+    await gemini.connect()
     try:
         yield gemini
     finally:

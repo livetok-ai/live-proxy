@@ -183,3 +183,6 @@ cython_debug/
 # Model weights
 *.pt
 
+# Scripts folder
+scripts/
+

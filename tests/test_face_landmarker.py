@@ -19,21 +19,13 @@ async def test_face_landmarker_provider_init():
 @pytest.mark.asyncio
 async def test_face_landmarker_provider_connect():
     """Test FaceLandmarkerProvider connect and model loading (mocked)."""
-    provider = FaceLandmarkerProvider()
+    provider = FaceLandmarkerProvider(name="face_landmarker")
 
     with patch("os.path.exists", return_value=True), patch(
         "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
-        await provider.connect(
-            model="face_landmarker",
-            system_instructions=None,
-            tools=None,
-            tool_callback=None,
-            voice=None,
-            language=None,
-            api_key=None,
-        )
+        await provider.connect()
         assert provider.detector is not None
         mock_load.assert_called_once()
 
@@ -87,13 +79,13 @@ async def test_face_landmarker_provider_draw_detections():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceLandmarkerProvider(draw_detections=True)
+    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, draw=True)
 
     with patch("os.path.exists", return_value=True), patch(
         "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
-        await provider.connect(model="face_landmarker", connection=conn)
+        await provider.connect()
         assert provider.overlay_enabled is True
 
     # Send a dummy frame with a mocked result
@@ -122,13 +114,13 @@ async def test_face_landmarker_provider_sampling():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceLandmarkerProvider(draw_detections=True, sampling_rate=5)
+    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, draw=True, sampling=5)
 
     with patch("os.path.exists", return_value=True), patch(
         "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
-        await provider.connect(model="face_landmarker", connection=conn)
+        await provider.connect()
         assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 
@@ -156,5 +148,34 @@ async def test_face_landmarker_provider_sampling():
     # Process frame should be called again (the 6th frame)
     assert call_count == 2
     assert provider.frame_count == 6
+
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_face_landmarker_provider_queue_limit():
+    """Test FaceLandmarkerProvider output queue size is capped at 10 frames."""
+    provider = FaceLandmarkerProvider(name="face_landmarker")
+
+    # Mock detector
+    provider.detector = MagicMock()
+
+    # Enable output to queue frames
+    provider.output_enabled = True
+
+    # Send 12 dummy frames with a mocked _process_frame to avoid mediapipe dependency
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
+        mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
+        img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+        for i in range(12):
+            img.pts = i
+            await provider.send(img)
+
+    # Queue size should be exactly 10
+    assert provider.output_queue.qsize() == 10
+
+    # The first two frames should have been discarded.
+    first_frame = await provider.output_queue.get()
+    assert first_frame.pts == 2
 
     await provider.close()

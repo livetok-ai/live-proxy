@@ -28,8 +28,10 @@ class CartesiaTTS(Model):
     Audio input is ignored, and only text input is converted to speech.
     """
 
-    def __init__(self, voice_id: str = None, model_id: str = "sonic-3", api_key: str = None):
-        super().__init__()
+    def __init__(
+        self, name=None, connection=None, voice_id: str = None, model_id: str = "sonic-3", api_key: str = None, **kwargs
+    ):
+        super().__init__(name=name, connection=connection, **kwargs)
         self.voice_id = voice_id or "e07c00bc-4134-4eae-9ea4-1a55fb45746b"
         self.model_id = model_id
         self.api_key = api_key or os.getenv("CARTESIA_API_KEY")
@@ -46,6 +48,7 @@ class CartesiaTTS(Model):
         self._receiving = False
         self._context_id = str(uuid.uuid4())
         self._pending_text = ""
+        log_info(f"Cartesia TTS provider model={self.model_id}, voice={self.voice_id}")
 
     @property
     def connected(self):
@@ -53,7 +56,6 @@ class CartesiaTTS(Model):
 
     async def connect(self):
         """Establish connection to Cartesia TTS service."""
-        log_info(f"Connecting to Cartesia TTS with model={self.model_id}, voice={self.voice_id}")
 
         # Create async client
         self.client = AsyncCartesia(api_key=self.api_key)

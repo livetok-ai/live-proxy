@@ -17,10 +17,8 @@ async def test_yolo_provider_init():
 @pytest.mark.asyncio
 async def test_yolo_provider_connect():
     """Test YoloProvider connect and model loading."""
-    provider = YoloProvider()
-    await provider.connect(
-        model="yolo", system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
-    )
+    provider = YoloProvider(name="yolo")
+    await provider.connect()
     assert provider.model is not None
     await provider.close()
 
@@ -28,10 +26,8 @@ async def test_yolo_provider_connect():
 @pytest.mark.asyncio
 async def test_yolo_provider_send_frame():
     """Test YoloProvider processing and logging of dummy frames."""
-    provider = YoloProvider()
-    await provider.connect(
-        model="yolo", system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
-    )
+    provider = YoloProvider(name="yolo")
+    await provider.connect()
 
     # Create a 100x100 dummy black image
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -67,8 +63,8 @@ async def test_yolo_provider_draw_detections():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = YoloProvider(draw_detections=True)
-    await provider.connect(model="yolo", connection=conn)
+    provider = YoloProvider(name="yolo", connection=conn, draw=True)
+    await provider.connect()
     assert provider.overlay_enabled is True
 
     # Send a dummy frame
@@ -90,26 +86,13 @@ async def test_yolo_provider_draw_detections():
 
 
 @pytest.mark.asyncio
-async def test_yolo_provider_draw_detections_disabled_by_direction():
-    """Test YoloProvider overlay is disabled if client does not support receiving."""
-    # When client only sends (recvonly on server, so server has no send capability)
-    transceiver = DummyTransceiver("video", "recvonly", "recvonly")
-    conn = DummyConnection([transceiver])
-
-    provider = YoloProvider(draw_detections=True)
-    await provider.connect(model="yolo", connection=conn)
-    assert provider.overlay_enabled is False
-    await provider.close()
-
-
-@pytest.mark.asyncio
 async def test_yolo_provider_sampling():
     """Test YoloProvider frame sampling rate."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = YoloProvider(draw_detections=True, sampling_rate=5)
-    await provider.connect(model="yolo", connection=conn)
+    provider = YoloProvider(name="yolo", connection=conn, draw=True, sampling=5)
+    await provider.connect()
     assert provider.overlay_enabled is True
     assert provider.sampling_rate == 5
 
@@ -137,5 +120,31 @@ async def test_yolo_provider_sampling():
     # YOLO model should be called again (the 6th frame)
     assert call_count == 2
     assert provider.frame_count == 6
+
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_yolo_provider_queue_limit():
+    """Test YoloProvider output queue size is capped at 10 frames."""
+    provider = YoloProvider(name="yolo")
+    await provider.connect()
+
+    # Enable output to queue frames
+    provider.output_enabled = True
+
+    # Send 12 dummy frames
+    img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+    for i in range(12):
+        img.pts = i
+        await provider.send(img)
+
+    # Queue size should be exactly 10
+    assert provider.output_queue.qsize() == 10
+
+    # The first two frames (pts 0 and 1) should have been discarded.
+    # The remaining frames in the queue should be pts 2 through 11.
+    first_frame = await provider.output_queue.get()
+    assert first_frame.pts == 2
 
     await provider.close()

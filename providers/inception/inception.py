@@ -7,12 +7,21 @@ from PIL import Image
 
 from logger import log_info
 from model import Input, Model, Output
+from utils import parse_int
 
 
 class InceptionProvider(Model):
     _shared_mtcnn = None
     _shared_resnet = None
     _shared_device = None
+
+    @property
+    def supports_video(self) -> bool:
+        return True
+
+    @property
+    def video_support(self) -> bool:
+        return True
 
     @classmethod
     async def setup(cls):
@@ -26,6 +35,7 @@ class InceptionProvider(Model):
         log_info(f"Loading FaceNet MTCNN and InceptionResnetV1 on device: {cls._shared_device}")
 
         loop = asyncio.get_event_loop()
+
         def _load():
             mtcnn = MTCNN(keep_all=False, device=cls._shared_device)
             resnet = InceptionResnetV1(pretrained="vggface2").eval().to(cls._shared_device)
@@ -34,32 +44,23 @@ class InceptionProvider(Model):
         cls._shared_mtcnn, cls._shared_resnet = await loop.run_in_executor(None, _load)
         log_info("Inception FaceNet models setup and loaded successfully")
 
-    def __init__(self, sampling_rate: int = 150, **kwargs):
-        """Inception (FaceNet) Provider for extracting face embeddings.
-
-        Args:
-            sampling_rate: Number of frames to wait before processing the next frame.
-                           For ~30 FPS video, 150 frames = once every 5 seconds.
-        """
-        super().__init__()
+    def __init__(self, name=None, connection=None, **kwargs):
+        """Inception (FaceNet) Provider for extracting face embeddings."""
+        super().__init__(name=name, connection=connection, **kwargs)
         self.mtcnn = None
         self.resnet = None
         self.device = None
+        self.model = kwargs.get("model") or name
 
-        # Support sampling rate from kwargs or default
-        self.sampling_rate = kwargs.get("sampling", sampling_rate)
-        if isinstance(self.sampling_rate, (int, str)):
-            self.sampling_rate = int(self.sampling_rate)
+        # Support sampling rate parameter only from kwargs
+        self.sampling_rate = parse_int(kwargs.get("sampling"), 150)
 
         self.frame_count = 0
         self.last_process_time = 0.0
-        # By default, we let YoloProvider control input_enabled dynamically.
-        # But we can default it to True in class __init__ if needed.
         self.input_enabled = True
+        log_info(f"Inception provider model: {self.model} sampling_rate: {self.sampling_rate}")
 
-    async def connect(self, name: str = None, connection=None, model: str = None):
-        model = name or model
-        log_info(f"Connecting to Inception FaceNet provider: {model}")
+    async def connect(self):
 
         if InceptionProvider._shared_resnet is None:
             await InceptionProvider.setup()
@@ -85,7 +86,7 @@ class InceptionProvider(Model):
             if embedding is not None:
                 embedding_list = embedding.tolist()
                 log_info(f"Inception extracted face embedding successfully (size: {len(embedding_list)})")
-                self._emit("face_embeddings", embedding_list)
+                self._emit("faces", {"embedding": embedding_list})
 
     def _process_frame(self, image: Image.Image):
         import torch

@@ -16,18 +16,10 @@ async def test_text_sentiment_provider_init():
 @pytest.mark.asyncio
 async def test_text_sentiment_provider_connect():
     """Test TextSentimentProvider connect loading VADER lexicon."""
-    provider = TextSentimentProvider()
+    provider = TextSentimentProvider(name="text_sentiment")
 
     with patch("nltk.download"):
-        await provider.connect(
-            model="text_sentiment",
-            system_instructions=None,
-            tools=None,
-            tool_callback=None,
-            voice=None,
-            language=None,
-            api_key=None,
-        )
+        await provider.connect()
         assert provider.sia is not None
 
     await provider.close()
@@ -36,8 +28,8 @@ async def test_text_sentiment_provider_connect():
 @pytest.mark.asyncio
 async def test_text_sentiment_provider_handle_transcription():
     """Test TextSentimentProvider sentiment polarity analysis."""
-    provider = TextSentimentProvider()
-    await provider.connect(model="text_sentiment")
+    provider = TextSentimentProvider(name="text_sentiment")
+    await provider.connect()
 
     # Analyze positive sentiment
     with patch.object(provider, "_emit") as mock_emit:
@@ -63,8 +55,8 @@ async def test_text_sentiment_provider_handle_transcription():
 @pytest.mark.asyncio
 async def test_text_sentiment_provider_send():
     """Test TextSentimentProvider handles text input via send."""
-    provider = TextSentimentProvider()
-    await provider.connect(model="text_sentiment")
+    provider = TextSentimentProvider(name="text_sentiment")
+    await provider.connect()
 
     with patch.object(provider, "handle_transcription") as mock_handle:
         await provider.send("Hello there")

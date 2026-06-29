@@ -10,17 +10,25 @@ from PIL.Image import Image
 
 from logger import log_info
 from model import Input, Model, Output
+from utils import limit_queue_size, parse_bool, parse_int
 
 
 class FaceLandmarkerProvider(Model):
     _shared_model_path = None
+
+    @property
+    def supports_video(self) -> bool:
+        return True
+
+    @property
+    def video_support(self) -> bool:
+        return True
 
     @classmethod
     async def setup(cls):
         if cls._shared_model_path is not None and os.path.exists(cls._shared_model_path):
             return
 
-        import urllib.request
         model_name = "face_landmarker.task"
         possible_paths = [
             model_name,
@@ -46,27 +54,27 @@ class FaceLandmarkerProvider(Model):
 
         log_info(f"Face Landmarker setup complete: {cls._shared_model_path}")
 
-    def __init__(self, draw_detections: bool = False, sampling_rate: int = 5, **kwargs):
-        super().__init__()
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
         self.detector = None
         self.last_emotion = None
-        self.draw_detections = kwargs.get("draw", draw_detections)
-        if isinstance(self.draw_detections, (int, str)):
-            self.draw_detections = bool(int(self.draw_detections)) if str(self.draw_detections).isdigit() else (str(self.draw_detections).lower() == 'true')
+        self.model = kwargs.get("model") or name
 
-        self.sampling_rate = kwargs.get("sampling", sampling_rate)
-        if isinstance(self.sampling_rate, (int, str)):
-            self.sampling_rate = int(self.sampling_rate)
+        # Support draw and sampling parameters only from kwargs
+        self.draw_detections = parse_bool(kwargs.get("draw"), False)
+        self.sampling_rate = parse_int(kwargs.get("sampling"), 5)
 
         self.frame_count = 0
         self.last_drawn_boxes = []
         self.output_queue = asyncio.Queue()
-        self.client_has_video_recv = False
         self.model_path = None
+        log_info(
+            f"Face Landmarker provider draw_detections: {self.draw_detections} sampling_rate: {self.sampling_rate}"
+        )
 
     @property
     def overlay_enabled(self) -> bool:
-        return self.draw_detections and self.client_has_video_recv
+        return self.draw_detections
 
     def get_color(self, label: str):
         # Premium harmonized color palette based on detected emotion
@@ -79,30 +87,13 @@ class FaceLandmarkerProvider(Model):
         }
         return colors.get(label, (0, 206, 209))
 
-    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
-        model = name or model
-        log_info(f"Connecting to Face Landmarker provider: {model}")
-
-        # Check if the video track has recv direction from client side
-        self.client_has_video_recv = False
-        if connection and connection.pc:
-            for transceiver in connection.pc.getTransceivers():
-                if transceiver.kind == "video":
-                    if transceiver.direction in ("sendonly", "sendrecv") or transceiver.currentDirection in (
-                        "sendonly",
-                        "sendrecv",
-                    ):
-                        self.client_has_video_recv = True
-                        break
-        log_info(
-            f"Face Landmarker provider overlay_enabled: {self.overlay_enabled} (draw_detections: {self.draw_detections}, client_has_video_recv: {self.client_has_video_recv})"
-        )
-
-        if FaceLandmarkerProvider._shared_model_path is None or not os.path.exists(FaceLandmarkerProvider._shared_model_path):
+    async def connect(self):
+        if FaceLandmarkerProvider._shared_model_path is None or not os.path.exists(
+            FaceLandmarkerProvider._shared_model_path
+        ):
             await FaceLandmarkerProvider.setup()
 
         self.model_path = FaceLandmarkerProvider._shared_model_path
-        log_info(f"Loading MediaPipe Face Landmarker model from: {self.model_path}")
 
         loop = asyncio.get_event_loop()
         self.detector = await loop.run_in_executor(None, self._load_detector)
@@ -154,35 +145,38 @@ class FaceLandmarkerProvider(Model):
             self.last_drawn_boxes = []
             self.last_emotion = None
 
-        # Overlay detections if enabled and output is enabled
-        if self.overlay_enabled and self.output_enabled:
-            drawn_image = input.copy()
-            draw = ImageDraw.Draw(drawn_image)
+        # Send/Overlay detections if output is enabled
+        if self.output_enabled:
+            if self.overlay_enabled:
+                drawn_image = input.copy()
+                draw = ImageDraw.Draw(drawn_image)
 
-            for box in self.last_drawn_boxes:
-                coords = box["coords"]
-                label = box["label"]
-                conf = box["conf"]
-                color = box["color"]
-                x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
+                for box in self.last_drawn_boxes:
+                    coords = box["coords"]
+                    label = box["label"]
+                    conf = box["conf"]
+                    color = box["color"]
+                    x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
 
-                # Draw elegant bounding box
-                draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+                    # Draw elegant bounding box
+                    draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
 
-                # Text label with confidence
-                text = f"{label} {conf:.2f}"
+                    # Text label with confidence
+                    text = f"{label} {conf:.2f}"
 
-                # Draw background box for text label
-                try:
-                    bbox = draw.textbbox((x1, y1), text)
-                    tw = bbox[2] - bbox[0]
-                    th = bbox[3] - bbox[1]
-                except AttributeError:
-                    tw, th = draw.textsize(text)
+                    # Draw background box for text label
+                    try:
+                        bbox = draw.textbbox((x1, y1), text)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                    except AttributeError:
+                        tw, th = draw.textsize(text)
 
-                text_bg = [x1, max(0, y1 - th - 6), x1 + tw + 6, y1]
-                draw.rectangle(text_bg, fill=color)
-                draw.text((x1 + 3, max(0, y1 - th - 4)), text, fill=(255, 255, 255))
+                    text_bg = [x1, max(0, y1 - th - 6), x1 + tw + 6, y1]
+                    draw.rectangle(text_bg, fill=color)
+                    draw.text((x1 + 3, max(0, y1 - th - 4)), text, fill=(255, 255, 255))
+            else:
+                drawn_image = input
 
             new_frame = VideoFrame.from_image(drawn_image)
             if hasattr(input, "pts"):
@@ -190,6 +184,7 @@ class FaceLandmarkerProvider(Model):
             if hasattr(input, "time_base"):
                 new_frame.time_base = input.time_base
 
+            limit_queue_size(self.output_queue, 10)
             self.output_queue.put_nowait(new_frame)
 
     def _process_frame(self, image: Image):
@@ -260,16 +255,12 @@ class FaceLandmarkerProvider(Model):
         return None
 
     async def recv(self) -> AsyncIterator[Output]:
-        if self.overlay_enabled:
-            while True:
-                try:
-                    frame = await self.output_queue.get()
-                    yield frame
-                except asyncio.CancelledError:
-                    break
-        else:
-            if False:
-                yield
+        while True:
+            try:
+                frame = await self.output_queue.get()
+                yield frame
+            except asyncio.CancelledError:
+                break
 
     async def close(self):
         log_info("Closing Face Landmarker provider")

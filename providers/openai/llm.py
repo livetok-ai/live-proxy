@@ -9,16 +9,36 @@ from PIL.Image import Image
 
 from logger import log_info
 from model import Input, Model, Output
+from utils import parse_bool, parse_int
 
 SAMPLE_RATE = 24000
 AUDIO_PTIME = 0.02
 
 
 class OpenAI(Model):
-    def __init__(self):
-        super().__init__()
+    @property
+    def is_llm(self) -> bool:
+        return True
+
+    @property
+    def supports_audio(self) -> bool:
+        return True
+
+    @property
+    def supports_text(self) -> bool:
+        return True
+
+    @property
+    def supports_video(self) -> bool:
+        return True
+
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
         self.session = None
-        self.tool_callback = None
+        self.tool_callback = connection.call_tool if connection else None
+        self.model = kwargs.get("model") or name
+        self.api_key = connection.api_key if connection else None
+        self.system_instructions = connection.system_instructions if connection else None
         self.resampler = AudioResampler(
             format="s16",
             layout="mono",
@@ -26,21 +46,25 @@ class OpenAI(Model):
             frame_size=int(SAMPLE_RATE * AUDIO_PTIME),
         )
 
-    async def connect(self, name: str = None, connection=None, model: str = None, **kwargs):
-        api_key = connection.api_key if connection else None
-        system_instructions = connection.system_instructions if connection else None
-        self.tool_callback = connection.call_tool if connection else None
-        model = name or model
-        self.client = AsyncOpenAI(api_key=api_key)
+        # Support sampling and use_video_buffer parameters only from kwargs
+        self.sampling_rate = parse_int(kwargs.get("sampling"), 30)
+        self.use_video_buffer = parse_bool(kwargs.get("use_video_buffer"), False)
+
+        self.frame_count = 0
+        from utils import VideoBuffer
+
+        self.video_buffer = VideoBuffer(max_size=10)
+
+    async def connect(self):
+        self.client = AsyncOpenAI(api_key=self.api_key)
 
         # Build the session config with optional system instructions
         session_config = {}
-        if system_instructions:
-            session_config["instructions"] = system_instructions
+        if self.system_instructions:
+            session_config["instructions"] = self.system_instructions
 
-        self.session_context = self.client.beta.realtime.connect(
-            model="gpt-4o-realtime-preview-2025-06-03" if model == "openai" else model
-        )
+        model_name = "gpt-4o-realtime-preview-2025-06-03" if self.model == "openai" else self.model
+        self.session_context = self.client.beta.realtime.connect(model=model_name)
         self.session = await self.session_context.__aenter__()
 
     async def send(self, input: Input):
@@ -61,6 +85,14 @@ class OpenAI(Model):
                 audio = base64.b64encode(data).decode("utf-8")
                 await self.session.input_audio_buffer.append(audio=audio)
         elif isinstance(input, Image):
+            self.frame_count += 1
+            should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
+            if not should_process:
+                return
+
+            if self.use_video_buffer:
+                input = self.video_buffer.add_and_composite(input)
+
             array = io.BytesIO()
             input.save(array, format="JPEG")
             video = base64.b64encode(array.getvalue()).decode("utf-8")
@@ -102,8 +134,16 @@ class OpenAI(Model):
 async def connect_openai(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
 ) -> AsyncGenerator[OpenAI, None]:
-    openai = OpenAI()
-    await openai.connect(model, system_instructions, tools, tool_callback, voice, language, api_key)
+    openai = OpenAI(
+        name=model,
+        system_instructions=system_instructions,
+        tools=tools,
+        tool_callback=tool_callback,
+        voice=voice,
+        language=language,
+        api_key=api_key,
+    )
+    await openai.connect()
     try:
         yield openai
     finally:

@@ -73,6 +73,7 @@
               <label for="model" class="block text-sm font-medium text-gray-700 mb-2">AI Model</label>
               <select id="model"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="none">None (Add-ons only)</option>
                 <option value="gemini-3.1-flash-live-preview" selected>Gemini 3.1 Flash Live Preview</option>
                 <option value="gemini-2.5-flash-native-audio-preview-12-2025">Gemini 2.5 Flash Native Audio Preview
                 </option>
@@ -107,7 +108,6 @@
                   <input id="provider-simli" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                   <label for="provider-simli" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <i class="fas fa-user-astronaut text-indigo-500 mr-2"></i>
                     <span>Simli (Avatar)</span>
                   </label>
                 </div>
@@ -115,7 +115,6 @@
                   <input id="provider-yolo" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                   <label for="provider-yolo" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <i class="fas fa-eye text-green-500 mr-2"></i>
                     <span>YOLO</span>
                   </label>
                 </div>
@@ -123,7 +122,6 @@
                   <input id="provider-face-landmarker" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                   <label for="provider-face-landmarker" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <i class="fas fa-smile text-amber-500 mr-2"></i>
                     <span>Face Landmarker</span>
                   </label>
                 </div>
@@ -131,8 +129,35 @@
                   <input id="provider-text-sentiment" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
                   <label for="provider-text-sentiment" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <i class="fas fa-file-signature text-blue-500 mr-2"></i>
                     <span>Text Sentiment</span>
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="provider-sam2" type="checkbox"
+                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                  <label for="provider-sam2" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>SAM 2</span>
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="provider-sam3" type="checkbox"
+                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                  <label for="provider-sam3" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>SAM 3</span>
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="provider-inception" type="checkbox"
+                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                  <label for="provider-inception" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>Inception</span>
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="provider-insivision" type="checkbox"
+                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                  <label for="provider-insivision" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>Insivision</span>
                   </label>
                 </div>
               </div>
@@ -352,9 +377,18 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
           </h2>
           <div class="space-y-4">
             <audio id="audio" autoplay="true" class="w-full"></audio>
-            <video id="video" autoplay="true" playsinline="true" muted="true"
-              class="w-full rounded-lg bg-gray-900"></video>
+            <div class="relative w-full rounded-lg bg-gray-900 overflow-hidden">
+              <video id="video" autoplay="true" playsinline="true" muted="true"
+                class="w-full"></video>
+              <div id="video-overlay" class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded text-sm hidden font-medium pointer-events-none transition-all duration-300"></div>
+            </div>
+            <button id="enable-control" onclick="toggleControl()"
+              class="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors flex items-center justify-center space-x-2">
+              <i class="fas fa-gamepad"></i>
+              <span>Enable Control</span>
+            </button>
           </div>
+
         </div>
 
         <!-- Data Channel -->

@@ -3,7 +3,8 @@ const dataChannelLog = document.getElementById('data-channel'),
   iceConnectionLog = document.getElementById('ice-connection-state');
 
 var pc = null;
-var dc = null;
+var dc = null;        // reliable datachannel (transcriptions, control messages)
+var dcUnreliable = null; // unreliable datachannel (key events)
 var lastMessageElement = null; // Track the last message bubble element
 var isAppendingToLast = false; // Track if we're appending to the last message
 
@@ -73,6 +74,10 @@ function createPeerConnection() {
   // connect audio / video
   pc.addEventListener('track', (evt) => {
     if (evt.track.kind == 'video' && document.getElementById('recv-video').checked) {
+      // Reduce jitter buffer to 100 ms for lower latency video playback
+      if (evt.receiver && 'jitterBufferTarget' in evt.receiver) {
+        evt.receiver.jitterBufferTarget = 0.1;
+      }
       document.getElementById('video').srcObject = evt.streams[0];
     } else {
       document.getElementById('audio').srcObject = evt.streams[0];
@@ -109,25 +114,42 @@ function enumerateInputDevices() {
 }
 
 async function negotiate() {
-  let model = document.getElementById('model').value;
+  const modelValue = document.getElementById('model').value;
+  let model = modelValue === 'none' ? '' : modelValue;
+
+  const appendAddon = (addon) => {
+    model = model ? model + ';' + addon : addon;
+  };
+
   if (document.getElementById('provider-simli')?.checked) {
-    model += ';simli';
+    appendAddon('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    model += ';yolo-overlay';
+    appendAddon('yolo[draw=true]');
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
-    model += ';face_landmarker-overlay';
+    appendAddon('face_landmarker[draw=true]');
   }
   if (document.getElementById('provider-text-sentiment')?.checked) {
-    model += ';text_sentiment';
+    appendAddon('text_sentiment');
+  }
+  if (document.getElementById('provider-sam2')?.checked) {
+    appendAddon('sam[version=sam2.1_t.pt,draw=true]');
+  }
+  if (document.getElementById('provider-sam3')?.checked) {
+    appendAddon('sam[version=sam2.1_t.pt,draw=true]');
+  }
+  if (document.getElementById('provider-inception')?.checked) {
+    appendAddon('inception');
+  }
+  if (document.getElementById('provider-insivision')?.checked) {
+    appendAddon('insivision');
   }
   const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
   const language = document.getElementById('language').value;
   const apiKey = document.getElementById('api-key').value.trim();
-  const avatar = document.getElementById('recv-video').checked;
   const ragCorpus = document.getElementById('rag-corpus').value.trim();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
@@ -159,11 +181,6 @@ async function negotiate() {
   // Add RAG corpus if provided
   if (ragCorpus) {
     body.rag_corpus = ragCorpus;
-  }
-
-  // Add avatar if provided
-  if (avatar) {
-    body.avatar = avatar;
   }
 
   requestBody = JSON.stringify(body);
@@ -216,18 +233,31 @@ async function start() {
   pc = createPeerConnection();
 
   dc = pc.createDataChannel('data', { ordered: true });
-  dc.addEventListener('close', () => {
-    // Data channel closed - no need to show this to user
-  });
-  dc.addEventListener('open', () => {
-    // Data channel opened - no need to show this to user
-  });
+  dc.addEventListener('close', () => {});
+  dc.addEventListener('open', () => {});
+
+  // Unreliable channel for low-latency key events (fire-and-forget)
+  dcUnreliable = pc.createDataChannel('keys', { ordered: false, maxRetransmits: 0 });
   dc.addEventListener('message', (evt) => {
     const message = evt.data;
 
     try {
       // Try to parse as JSON
       const data = JSON.parse(message);
+
+      // Show on top of the video feed any data received that has a "display" attribute
+      if (data && typeof data === 'object' && 'display' in data) {
+        const overlay = document.getElementById('video-overlay');
+        if (overlay) {
+          if (data.display !== null && data.display !== undefined && String(data.display).trim() !== '') {
+            overlay.textContent = data.display;
+            overlay.classList.remove('hidden');
+          } else {
+            overlay.textContent = '';
+            overlay.classList.add('hidden');
+          }
+        }
+      }
 
       if (data.type === 'transcription') {
         const currentMessageType = data.role; // 'user' or 'model'
@@ -284,7 +314,15 @@ async function start() {
 
   // Add transceiver for receiving video even if not sending
   if (recvVideo && !sendVideo) {
-    pc.addTransceiver('video', { direction: 'recvonly' });
+    const vt = pc.addTransceiver('video', { direction: 'recvonly' });
+    // Prefer H264; strip VP8 so it isn't offered at all.
+    const caps = RTCRtpReceiver.getCapabilities?.('video');
+    if (caps) {
+      const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
+      const rest = caps.codecs.filter(c => c.mimeType !== 'video/H264' && c.mimeType !== 'video/VP8');
+      const rtx  = caps.codecs.filter(c => c.mimeType === 'video/rtx');
+      try { vt.setCodecPreferences([...h264, ...rest, ...rtx]); } catch (_) {}
+    }
     document.getElementById('media').style.display = 'block';
   }
 
@@ -319,24 +357,71 @@ async function stop() {
     pc.close();
     pc = null;
   }
+  dc = null;
+  dcUnreliable = null;
 
   // Clear video sources
   document.getElementById('video').srcObject = null;
   document.getElementById('media').style.display = 'none';
+
+  // Hide video overlay
+  const overlay = document.getElementById('video-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.textContent = '';
+  }
 }
 
 enumerateInputDevices();
+
+// Keyboard control
+var controlEnabled = false;
+
+function toggleControl() {
+  controlEnabled = !controlEnabled;
+  const btn = document.getElementById('enable-control');
+  if (controlEnabled) {
+    btn.className = 'w-full bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2';
+    btn.querySelector('span').textContent = 'Control Enabled';
+  } else {
+    btn.className = 'w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors flex items-center justify-center space-x-2';
+    btn.querySelector('span').textContent = 'Enable Control';
+  }
+}
+
+const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
+function sendKeyEvent(type, evt) {
+  if (!controlEnabled) return;
+  // Prevent arrow keys from scrolling the page while control is active
+  if (ARROW_KEYS.has(evt.key)) evt.preventDefault();
+  const ch = dcUnreliable && dcUnreliable.readyState === 'open' ? dcUnreliable : dc;
+  if (!ch || ch.readyState !== 'open') return;
+  ch.send(JSON.stringify({ type, key: evt.key, code: evt.code }));
+}
+
+document.addEventListener('keydown', (evt) => sendKeyEvent('keydown', evt));
+document.addEventListener('keyup', (evt) => sendKeyEvent('keyup', evt));
 
 // Automatically enable video checkboxes when a video model provider is selected
 const handleProviderChange = () => {
   const simliChecked = document.getElementById('provider-simli')?.checked;
   const yoloChecked = document.getElementById('provider-yolo')?.checked;
   const faceLandmarkerChecked = document.getElementById('provider-face-landmarker')?.checked;
+  const sam2Checked = document.getElementById('provider-sam2')?.checked;
+  const sam3Checked = document.getElementById('provider-sam3')?.checked;
+  const inceptionChecked = document.getElementById('provider-inception')?.checked;
+  const insivisionChecked = document.getElementById('provider-insivision')?.checked;
 
-  if (simliChecked || yoloChecked || faceLandmarkerChecked) {
+  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
+    if (recvVideo) recvVideo.checked = true;
+  }
+
+  if (insivisionChecked) {
+    const recvVideo = document.getElementById('recv-video');
     if (recvVideo) recvVideo.checked = true;
   }
 };
@@ -344,5 +429,9 @@ const handleProviderChange = () => {
 document.getElementById('provider-simli')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-yolo')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-face-landmarker')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-sam2')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-sam3')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-inception')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
 
 

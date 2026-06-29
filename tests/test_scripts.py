@@ -6,7 +6,38 @@ import pytest
 import script_manager
 from connection import Connection
 from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
+from providers.inception.inception import InceptionProvider
 from providers.yolo.yolo import YoloProvider
+
+
+class DummyInceptionModel(InceptionProvider):
+    def __init__(self):
+        self.input_enabled = True
+        self.output_enabled = True
+        self._handlers = {}
+
+    def on(self, event, handler):
+        self._handlers[event] = handler
+
+    def off(self, event, handler):
+        if event in self._handlers:
+            del self._handlers[event]
+
+    def trigger(self, event, data):
+        if event in self._handlers:
+            self._handlers[event](data)
+
+    def enable_input(self):
+        self.input_enabled = True
+
+    def disable_input(self):
+        self.input_enabled = False
+
+    def enable_output(self):
+        self.output_enabled = True
+
+    def disable_output(self):
+        self.output_enabled = False
 
 
 class DummyYoloModel(YoloProvider):
@@ -243,6 +274,8 @@ async def test_js_counter_script_logic():
 
     # Run setup
     counter_script.setup(conn)
+    # Set start_time to 0 to bypass the 5-second delay in test
+    counter_script.contexts[conn.id][0].eval("connection.start_time = 0;")
 
     # Check that handlers were registered
     assert "objects" in yolo._handlers
@@ -271,15 +304,253 @@ async def test_js_counter_script_logic():
     landmark.trigger("sentiment", "happy")
     landmark.trigger("sentiment", "neutral")
 
-    # 4. Run teardown
-    with patch("logger.log_info") as mock_log_info:
-        counter_script.teardown(conn)
+    # No teardown check since it was removed from counter.js
 
-        # Verify log output called for final counts
-        log_messages = [call[0][0] for call in mock_log_info.call_args_list]
-        assert any("Final object counts:" in msg for msg in log_messages)
-        assert any("Final sentiment counts:" in msg for msg in log_messages)
 
-    # Check event handlers were cleaned up
-    assert "objects" not in yolo._handlers
-    assert "sentiment" not in landmark._handlers
+@pytest.mark.asyncio
+async def test_connection_send_data_python():
+    """Test Connection.send_data is callable and correctly serializes and sends data via the data channel."""
+    import json
+
+    conn = Connection()
+
+    class MockDataChannel:
+        def __init__(self):
+            self.readyState = "open"
+            self.sent_messages = []
+
+        def send(self, msg):
+            self.sent_messages.append(msg)
+
+    mock_dc = MockDataChannel()
+    conn.data_channel = mock_dc
+
+    # Send arbitrary dict
+    test_dict = {"status": "ok", "count": 42}
+    conn.send_data(test_dict)
+
+    assert len(mock_dc.sent_messages) == 1
+    assert json.loads(mock_dc.sent_messages[0]) == test_dict
+
+
+@pytest.mark.asyncio
+async def test_connection_send_data_js(tmp_path):
+    """Test that connection.send_data() can be called from a JavaScript script and sends data."""
+    import json
+
+    conn = Connection()
+
+    class MockDataChannel:
+        def __init__(self):
+            self.readyState = "open"
+            self.sent_messages = []
+
+        def send(self, msg):
+            self.sent_messages.append(msg)
+
+    mock_dc = MockDataChannel()
+    conn.data_channel = mock_dc
+
+    # Write a simple JS script that calls connection.send_data()
+    js_file = tmp_path / "test_send.js"
+    js_file.write_text("""
+        function setup(connection) {
+            connection.send_data({display: "Hello from JS", value: 123});
+        }
+    """)
+
+    js_script = script_manager.JavaScriptScript(str(js_file))
+    js_script.setup(conn)
+
+    assert len(mock_dc.sent_messages) == 1
+    sent_data = json.loads(mock_dc.sent_messages[0])
+    assert sent_data == {"display": "Hello from JS", "value": 123}
+
+
+@pytest.mark.asyncio
+async def test_js_add_model_kwargs(tmp_path):
+    """Test that connection.add_model() can be called from a JavaScript script with a dictionary of kwargs."""
+    conn = Connection()
+
+    with patch.object(conn, "add_model_sync") as mock_add_model_sync:
+        js_file = tmp_path / "test_add_model_kwargs.js"
+        js_file.write_text("""
+            function setup(connection) {
+                connection.add_model("yolo", { sampling: 150 });
+            }
+        """)
+
+        js_script = script_manager.JavaScriptScript(str(js_file))
+        js_script.setup(conn)
+
+        mock_add_model_sync.assert_called_once_with("yolo", {"sampling": 150})
+
+
+@pytest.mark.asyncio
+async def test_js_add_tool_and_fetch(tmp_path):
+    """Test that llm.addTool() and fetch() can be called from JavaScript script, and the tool callback executes."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from providers.gemini.llm import Gemini
+
+    conn = Connection()
+
+    # Initialize a real Gemini instance or mock
+    gemini_model = Gemini()
+    gemini_model.connect = AsyncMock()
+    gemini_model.close = AsyncMock()
+    gemini_model.session = MagicMock()
+    conn.models = [gemini_model]
+
+    # Write a simple JS script that calls addTool
+    js_file = tmp_path / "test_add_tool.js"
+    js_file.write_text("""
+        function setup(connection) {
+            const llm = connection.get_model("gemini");
+            llm.addTool({
+                name: "get_weather",
+                description: "Get weather",
+                parameters: [
+                    { name: "location", type: "string" }
+                ],
+                callback: (location) => {
+                    const res = fetch("https://api.example.com/weather?q=" + location);
+                    return res.ok ? "Weather in " + location + " is sunny" : "Error";
+                }
+            });
+        }
+    """)
+
+    # Mock py_fetch in script_manager or test it directly
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"status": "ok"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        js_script = script_manager.JavaScriptScript(str(js_file))
+        js_script.setup(conn)
+
+        # Verify tool is registered on Gemini
+        assert "get_weather" in gemini_model.tools
+        tool_dict, callback = gemini_model.tools["get_weather"]
+        assert tool_dict["name"] == "get_weather"
+        assert tool_dict["description"] == "Get weather"
+
+        # Execute the Python callback (which invokes the JS callback)
+        result = await callback({"location": "Chicago"})
+        assert result == "Weather in Chicago is sunny"
+
+        # Verify urlopen was called
+        mock_urlopen.assert_called_once()
+        called_args = mock_urlopen.call_args[0]
+        assert called_args[0].full_url == "https://api.example.com/weather?q=Chicago"
+
+
+@pytest.mark.asyncio
+async def test_dynamic_script_execution():
+    """Test that a script string attached to the connection is compiled and executed by script_manager."""
+    conn = Connection()
+    conn.script = """
+        function setup(connection) {
+            connection.send_data({ event: "setup_done" });
+        }
+        function teardown(connection) {
+            connection.send_data({ event: "teardown_done" });
+        }
+    """
+
+    class MockDataChannel:
+        def __init__(self):
+            self.readyState = "open"
+            self.sent_messages = []
+
+        def send(self, msg):
+            self.sent_messages.append(msg)
+
+    mock_dc = MockDataChannel()
+    conn.data_channel = mock_dc
+
+    # Run setup
+    await script_manager.run_setup(conn)
+
+    # Check setup executed
+    assert hasattr(conn, "_compiled_script")
+    assert len(mock_dc.sent_messages) == 1
+    assert "setup_done" in mock_dc.sent_messages[0]
+
+    # Run teardown
+    await script_manager.run_teardown(conn)
+    assert len(mock_dc.sent_messages) == 2
+    assert "teardown_done" in mock_dc.sent_messages[1]
+
+
+@pytest.mark.asyncio
+async def test_js_async_add_tool(tmp_path):
+    """Test that an async JavaScript tool callback can be registered and resolved properly via Promise queue."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from providers.gemini.llm import Gemini
+
+    conn = Connection()
+    gemini_model = Gemini()
+    gemini_model.connect = AsyncMock()
+    gemini_model.close = AsyncMock()
+    gemini_model.session = MagicMock()
+    conn.models = [gemini_model]
+
+    # Write a simple JS script that calls addTool with an async callback using a Promise
+    js_file = tmp_path / "test_async_tool.js"
+    js_file.write_text("""
+        function setup(connection) {
+            const llm = connection.get_model("gemini");
+            llm.addTool({
+                name: "async_multiply",
+                description: "Async multiplication",
+                parameters: [
+                    { name: "x", type: "number" },
+                    { name: "y", type: "number" }
+                ],
+                callback: async (x, y) => {
+                    // Simulating an async operation using a resolved Promise
+                    const factor = await Promise.resolve(2);
+                    return x * y * factor;
+                }
+            });
+        }
+    """)
+
+    js_script = script_manager.JavaScriptScript(str(js_file))
+    js_script.setup(conn)
+
+    # Verify tool is registered on Gemini
+    assert "async_multiply" in gemini_model.tools
+    tool_dict, callback = gemini_model.tools["async_multiply"]
+    assert tool_dict["name"] == "async_multiply"
+
+    # Execute the Python callback (which invokes the JS callback asynchronously)
+    result = await callback({"x": 3, "y": 7})
+    assert result == 42
+
+
+@pytest.mark.asyncio
+async def test_js_connection_close(tmp_path):
+    """Test that connection.close() can be called from a JavaScript script and initiates connection closing."""
+    import asyncio
+    conn = Connection()
+
+    # Write a simple JS script that calls connection.close()
+    js_file = tmp_path / "test_close.js"
+    js_file.write_text("""
+        function setup(connection) {
+            connection.close();
+        }
+    """)
+
+    js_script = script_manager.JavaScriptScript(str(js_file))
+    js_script.setup(conn)
+
+    # Give the event loop a brief moment to execute the scheduled task
+    await asyncio.sleep(0.01)
+
+    assert conn._closing is True

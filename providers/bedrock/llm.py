@@ -25,9 +25,10 @@ from model import Input, Model, Output
 
 
 class Bedrock(Model):
-    def __init__(self, model_id, region):
-        self.model_id = model_id
-        self.region = region
+    def __init__(self, name=None, connection=None, model_id=None, region=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
+        self.model_id = model_id or kwargs.get("model_id")
+        self.region = region or kwargs.get("region")
         self.client = None
         self.stream = None
         self.prompt_name = str(uuid.uuid4())

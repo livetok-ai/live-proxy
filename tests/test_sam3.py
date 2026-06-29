@@ -4,42 +4,40 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from providers.sam3.sam3 import Sam3Provider
+from providers.sam3.sam3 import SamProvider
 
 
 @pytest.mark.asyncio
 async def test_sam3_provider_init():
-    """Test Sam3Provider initialization and default attributes."""
-    provider = Sam3Provider()
+    """Test SamProvider initialization and default attributes."""
+    provider = SamProvider()
     assert provider.model is None
     assert provider.model_version == "sam2.1_t.pt"
 
 
 @pytest.mark.asyncio
 async def test_sam3_provider_connect():
-    """Test Sam3Provider connect and model loading."""
-    provider = Sam3Provider()
+    """Test SamProvider connect and model loading."""
+    provider = SamProvider(name="sam", connection=None, version="sam2.1_t.pt")
     # Mocking the actual SAM model load to keep unit tests fast and offline-friendly
     called = False
 
     async def mock_setup(model_version):
         nonlocal called
         called = True
-        Sam3Provider._shared_model = "mock_sam_model"
+        SamProvider._shared_model = "mock_sam_model"
 
-    original_setup = Sam3Provider.setup
-    Sam3Provider.setup = mock_setup
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
 
     try:
-        await provider.connect(
-            model="sam3;version=sam2.1_t.pt", system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
-        )
+        await provider.connect()
         assert called is True
         assert provider.model == "mock_sam_model"
         assert provider.model_version == "sam2.1_t.pt"
     finally:
-        Sam3Provider.setup = original_setup
-        Sam3Provider._shared_model = None
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
         await provider.close()
 
 
@@ -69,16 +67,17 @@ async def test_sam3_provider_draw_detections():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = Sam3Provider(draw_detections=True)
+    provider = SamProvider(name="sam", connection=conn, draw=True)
 
     # Mock setup
     async def mock_setup(model_version):
-        Sam3Provider._shared_model = "mock_sam_model"
-    original_setup = Sam3Provider.setup
-    Sam3Provider.setup = mock_setup
+        SamProvider._shared_model = "mock_sam_model"
+
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
 
     try:
-        await provider.connect(model="sam3", connection=conn)
+        await provider.connect()
         assert provider.overlay_enabled is True
 
         # Send a dummy frame
@@ -112,8 +111,8 @@ async def test_sam3_provider_draw_detections():
         assert len(received_frames) == 1
         assert received_frames[0].pts == 12345
     finally:
-        Sam3Provider.setup = original_setup
-        Sam3Provider._shared_model = None
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
         await provider.close()
 
 
@@ -123,15 +122,16 @@ async def test_sam3_provider_sampling():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = Sam3Provider(draw_detections=True, sampling_rate=5)
+    provider = SamProvider(name="sam", connection=conn, draw=True, sampling=5)
 
     async def mock_setup(model_version):
-        Sam3Provider._shared_model = "mock_sam_model"
-    original_setup = Sam3Provider.setup
-    Sam3Provider.setup = mock_setup
+        SamProvider._shared_model = "mock_sam_model"
+
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
 
     try:
-        await provider.connect(model="sam3", connection=conn)
+        await provider.connect()
         assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 
@@ -160,6 +160,47 @@ async def test_sam3_provider_sampling():
         assert call_count == 2
         assert provider.frame_count == 6
     finally:
-        Sam3Provider.setup = original_setup
-        Sam3Provider._shared_model = None
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_sam3_provider_queue_limit():
+    """Test SamProvider output queue size is capped at 10 frames."""
+    provider = SamProvider(name="sam")
+
+    async def mock_setup(model_version):
+        SamProvider._shared_model = "mock_sam_model"
+
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
+
+    try:
+        await provider.connect()
+
+        # Enable output to queue frames
+        provider.output_enabled = True
+
+        # Mock model predict
+        def dummy_model(input_img, *args, **kwargs):
+            return []
+
+        provider.model = dummy_model
+
+        # Send 12 dummy frames
+        img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+        for i in range(12):
+            img.pts = i
+            await provider.send(img)
+
+        # Queue size should be exactly 10
+        assert provider.output_queue.qsize() == 10
+
+        # The first two frames should have been discarded.
+        first_frame = await provider.output_queue.get()
+        assert first_frame.pts == 2
+    finally:
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
         await provider.close()

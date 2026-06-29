@@ -8,8 +8,8 @@ from model import Input, Model, ModelEvents, Output
 class MockModel(Model):
     """Test implementation of Model for testing event functionality."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name=None, connection=None, **kwargs):
+        super().__init__(name=name, connection=connection, **kwargs)
         self.sent_inputs = []
         self.recv_outputs = []
 

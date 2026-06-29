@@ -18,10 +18,35 @@ class ModelEvents:
 
 
 class Model:
-    def __init__(self):
+    def __init__(self, name=None, connection=None, **kwargs):
+        self.name = name
+        self.connection = connection
         self._event_handlers = defaultdict(list)
         self.input_enabled = True
         self.output_enabled = True
+
+    async def connect(self):
+        pass
+
+    @property
+    def supports_audio(self) -> bool:
+        return False
+
+    @property
+    def supports_text(self) -> bool:
+        return False
+
+    @property
+    def supports_video(self) -> bool:
+        return False
+
+    @property
+    def video_support(self) -> bool:
+        return False
+
+    @property
+    def is_llm(self) -> bool:
+        return False
 
     def enable_input(self):
         self.input_enabled = True
@@ -80,6 +105,10 @@ class Model:
 
     @abstractmethod
     async def recv(self) -> AsyncIterator[Output]:
+        pass
+
+    async def send_info(self, info: str):
+        """Send arbitrary information to the session."""
         pass
 
     async def close(self):

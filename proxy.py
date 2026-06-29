@@ -14,10 +14,29 @@ load_dotenv()
 
 import aiohttp
 from aiohttp import web
-from aiohttp_cors import ResourceOptions
-from aiohttp_cors import setup as setup_cors
 
 import metrics
+
+
+@web.middleware
+async def cors_middleware(request: web.Request, handler) -> web.Response:
+    if request.method == "OPTIONS":
+        return web.Response(
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    response = await handler(request)
+    response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "*")
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    return response
+
+
 from connection import ConnectionManager
 from logger import log_info
 from sip import SIPServer
@@ -35,24 +54,15 @@ class HTTPServer:
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
-        self.app = web.Application()
+        self.app = web.Application(middlewares=[cors_middleware])
         self._setup_routes()
         self.app.on_shutdown.append(self._on_shutdown)
 
     def _setup_routes(self):
-        # Setup CORS
-        cors = setup_cors(
-            self.app,
-            defaults={
-                "*": ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*", allow_methods="*")
-            },
-        )
-
-        # Add routes with CORS
-        cors.add(self.app.router.add_post("/connection", self.create_connection))
-        cors.add(self.app.router.add_delete("/connection/{connection_id}", self.delete_connection))
-        cors.add(self.app.router.add_put("/connection/{connection_id}", self.update_connection))
-        cors.add(self.app.router.add_get("/metrics", self.metrics_endpoint))
+        self.app.router.add_post("/connection", self.create_connection)
+        self.app.router.add_delete("/connection/{connection_id}", self.delete_connection)
+        self.app.router.add_put("/connection/{connection_id}", self.update_connection)
+        self.app.router.add_get("/metrics", self.metrics_endpoint)
         self.app.router.add_static("/demo", os.path.join(os.path.dirname(__file__), "demo"))
 
     async def _on_shutdown(self, app):
@@ -80,7 +90,7 @@ class HTTPServer:
             "language",
             "model",
             "api_key",
-            "avatar",
+            "script",
         ]
         return {key: body.get(key) for key in keys}
 
@@ -105,7 +115,7 @@ class HTTPServer:
             raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
 
         log_info(
-            f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']} tools: {params['tools']}"
+            f"Creating connection model: {params['model']} callback: {params['callback']} instructions: {params['system_instructions'][:100] if params['system_instructions'] else None} metadata: {params['metadata']} voice: {params['voice']} language: {params['language']} tools: {len(params['tools']) if params['tools'] else 0} script: {True if params['script'] else False}"
         )
 
         # Create and start connection using ConnectionManager
@@ -120,7 +130,7 @@ class HTTPServer:
                 params["voice"],
                 params["language"],
                 params["api_key"],
-                params["avatar"],
+                params["script"],
             )
             return web.Response(
                 content_type="application/json",
@@ -267,6 +277,18 @@ async def _tool_call_request(connection, tool_name, tool_id, parameters, tools, 
 
 async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_url):
     """Run both the web app and SIP server concurrently."""
+    # Setup all models before starting the servers
+    from connection import MODEL_MAP
+
+    log_info("Initializing and setting up all models...")
+    for model_cls in set(MODEL_MAP.values()):
+        try:
+            res = await model_cls.setup()
+            suffix = f" ({res})" if res else ""
+            log_info(f"Setting up model class: {model_cls.__name__}{suffix}")
+        except Exception as e:
+            log_info(f"Error setting up model class {model_cls.__name__}: {e}")
+
     http_server = HTTPServer(host=host, port=port, ssl_context=ssl_context)
     sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)
 
@@ -296,6 +318,7 @@ if __name__ == "__main__":
         level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging.getLogger("aioice").setLevel(level=logging.WARN)
+    logging.getLogger("httpx").setLevel(level=logging.WARNING)
 
     if args.cert_file:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
