@@ -278,16 +278,16 @@ async def _tool_call_request(connection, tool_name, tool_id, parameters, tools, 
 async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_url):
     """Run both the web app and SIP server concurrently."""
     # Setup all models before starting the servers
-    from connection import MODEL_MAP
+    # from connection import MODEL_MAP
 
-    log_info("Initializing and setting up all models...")
-    for model_cls in set(MODEL_MAP.values()):
-        try:
-            res = await model_cls.setup()
-            suffix = f" ({res})" if res else ""
-            log_info(f"Setting up model class: {model_cls.__name__}{suffix}")
-        except Exception as e:
-            log_info(f"Error setting up model class {model_cls.__name__}: {e}")
+    # log_info("Initializing and setting up all models...")
+    # for model_cls in set(MODEL_MAP.values()):
+    #     try:
+    #         res = await model_cls.setup()
+    #         suffix = f" ({res})" if res else ""
+    #         log_info(f"Setting up model class: {model_cls.__name__}{suffix}")
+    #     except Exception as e:
+    #         log_info(f"Error setting up model class {model_cls.__name__}: {e}")
 
     http_server = HTTPServer(host=host, port=port, ssl_context=ssl_context)
     sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)

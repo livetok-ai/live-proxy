@@ -69,6 +69,7 @@ try:
     from providers.local_llm.local_llm import LocalLLM
     from providers.ocr.ocr import OCRProvider
     from providers.insivision.visual import Insivision
+    from providers.mujoco.visual import MujocoModel
 finally:
     if suppress_objc_warnings:
         try:
@@ -93,6 +94,7 @@ MODEL_MAP = {
     "local_llm": LocalLLM,
     "ocr": OCRProvider,
     "insivision": Insivision,
+    "mujoco": MujocoModel,
 }
 
 
@@ -355,21 +357,7 @@ class Connection:
                         self.info("Track video added because client wants to receive video")
                         self.send_video_track = SendingTrack("video")
                         self.pc.addTrack(self.send_video_track)
-                        asyncio.ensure_future(self._apply_video_bitrate())
                         break
-
-    async def _apply_video_bitrate(self, bitrate: int = VIDEO_MAX_BITRATE):
-        for _ in range(50):
-            await asyncio.sleep(0.1)
-            for sender in self.pc.getSenders():
-                if sender.track and sender.track.kind == "video":
-                    enc = getattr(sender, "_RTCRtpSender__encoder", None)
-                    if enc and hasattr(enc, "target_bitrate"):
-                        enc.target_bitrate = bitrate
-                        self.info(
-                            f"Video encoder bitrate set to {bitrate // 1000} kbps (min {VIDEO_MIN_BITRATE // 1000} kbps)"
-                        )
-                        return
 
     def get_model(self, name: str):
         model_name, _ = parse_model(name)

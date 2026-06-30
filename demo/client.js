@@ -5,6 +5,7 @@ const dataChannelLog = document.getElementById('data-channel'),
 var pc = null;
 var dc = null;        // reliable datachannel (transcriptions, control messages)
 var dcUnreliable = null; // unreliable datachannel (key events)
+var heartbeatInterval = null;
 var lastMessageElement = null; // Track the last message bubble element
 var isAppendingToLast = false; // Track if we're appending to the last message
 
@@ -145,6 +146,9 @@ async function negotiate() {
   if (document.getElementById('provider-insivision')?.checked) {
     appendAddon('insivision');
   }
+  if (document.getElementById('provider-mujoco')?.checked) {
+    appendAddon('mujoco');
+  }
   const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
@@ -238,6 +242,13 @@ async function start() {
 
   // Unreliable channel for low-latency key events (fire-and-forget)
   dcUnreliable = pc.createDataChannel('keys', { ordered: false, maxRetransmits: 0 });
+  dcUnreliable.addEventListener('open', () => {
+    heartbeatInterval = setInterval(() => {
+      if (dcUnreliable && dcUnreliable.readyState === 'open') {
+        try { dcUnreliable.send('{}'); } catch (_) {}
+      }
+    }, 20);
+  });
   dc.addEventListener('message', (evt) => {
     const message = evt.data;
 
@@ -359,6 +370,7 @@ async function stop() {
   }
   dc = null;
   dcUnreliable = null;
+  if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
 
   // Clear video sources
   document.getElementById('video').srcObject = null;
@@ -412,6 +424,7 @@ const handleProviderChange = () => {
   const sam3Checked = document.getElementById('provider-sam3')?.checked;
   const inceptionChecked = document.getElementById('provider-inception')?.checked;
   const insivisionChecked = document.getElementById('provider-insivision')?.checked;
+  const mujocoChecked = document.getElementById('provider-mujoco')?.checked;
 
   if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked) {
     const sendVideo = document.getElementById('send-video');
@@ -420,7 +433,7 @@ const handleProviderChange = () => {
     if (recvVideo) recvVideo.checked = true;
   }
 
-  if (insivisionChecked) {
+  if (insivisionChecked || mujocoChecked) {
     const recvVideo = document.getElementById('recv-video');
     if (recvVideo) recvVideo.checked = true;
   }
@@ -433,5 +446,6 @@ document.getElementById('provider-sam2')?.addEventListener('change', handleProvi
 document.getElementById('provider-sam3')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-inception')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
 
 

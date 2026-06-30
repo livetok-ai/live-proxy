@@ -46,6 +46,7 @@ dependencies = [
     "opencv-python",
     "mediapipe",
     "easyocr",
+    "mujoco>=3.0.0",
 ]
 
 

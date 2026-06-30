@@ -8,7 +8,25 @@ Live-Proxy is an open-source proxy service for interacting with large language m
 
 ### Prerequisites
 
-Python 3.8+ is required. See [README_DEV.md](README_DEV.md) for detailed development setup instructions.
+Python 3.8+ is required. [uv](https://docs.astral.sh/uv/) is recommended for managing the virtual environment and dependencies.
+
+### Setup with uv
+
+```bash
+# Create a virtual environment
+uv venv
+
+# Activate it
+source .venv/bin/activate      # macOS/Linux
+# .venv\Scripts\activate       # Windows
+
+# Install dependencies
+uv sync
+```
+
+After activating the venv you can run scripts directly with `python`, or skip activation and use `uv run python` instead (uv resolves the environment automatically).
+
+See [README_DEV.md](README_DEV.md) for detailed development setup instructions.
 
 ### Running the Server
 

@@ -1,0 +1,146 @@
+<mujoco model="factory scene">
+  <include file="panda.xml"/>
+
+  <!-- Wider view to show the industrial environment -->
+  <statistic center="0.3 0 1.2" extent="4"/>
+
+  <visual>
+    <headlight diffuse="0.3 0.3 0.3" ambient="0.15 0.15 0.15" specular="0 0 0"/>
+    <rgba haze="0.08 0.08 0.1 1"/>
+    <global azimuth="120" elevation="-15" offwidth="1280" offheight="720"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.08 0.08 0.12" rgb2="0.03 0.03 0.05" width="512" height="3072"/>
+
+    <!-- Concrete floor -->
+    <texture type="2d" name="concrete" builtin="checker" mark="edge"
+             rgb1="0.34 0.33 0.31" rgb2="0.27 0.26 0.24"
+             markrgb="0.48 0.47 0.45" width="600" height="600"/>
+    <material name="concrete" texture="concrete" texuniform="true" texrepeat="10 10" reflectance="0.04"/>
+
+    <!-- Industrial materials -->
+    <material name="metal_dark"    rgba="0.18 0.18 0.20 1" reflectance="0.25" specular="0.7" shininess="0.4"/>
+    <material name="metal_mid"     rgba="0.45 0.46 0.48 1" reflectance="0.30" specular="0.8" shininess="0.5"/>
+    <material name="metal_light"   rgba="0.62 0.63 0.65 1" reflectance="0.35" specular="0.9" shininess="0.6"/>
+    <material name="wall_paint"    rgba="0.42 0.45 0.40 1" reflectance="0.04"/>
+    <material name="ceiling_metal" rgba="0.25 0.25 0.26 1" reflectance="0.08"/>
+    <material name="yellow_stripe" rgba="0.92 0.78 0.0 1"/>
+    <material name="safety_red"    rgba="0.82 0.10 0.10 1"/>
+    <material name="light_panel"   rgba="0.92 0.92 0.88 1" emission="0.5"/>
+    <material name="rubber_belt"   rgba="0.15 0.15 0.14 1" reflectance="0.02"/>
+  </asset>
+
+  <worldbody>
+    <!-- Floor -->
+    <geom name="floor" size="0 0 0.05" type="plane" material="concrete"/>
+
+    <!-- ── Walls & ceiling ─────────────────────────────────────────── -->
+    <geom name="wall_back"  type="box" size="8 0.18 4" pos="0 -6 4"  material="wall_paint"/>
+    <geom name="wall_left"  type="box" size="0.18 8 4" pos="-7 0 4"  material="wall_paint"/>
+    <geom name="wall_right" type="box" size="0.18 8 4" pos=" 7 0 4"  material="wall_paint"/>
+    <geom name="ceiling"    type="box" size="8 8 0.18" pos="0 0 7.8" material="ceiling_metal"/>
+
+    <!-- Steel I-beam pillars -->
+    <geom name="pillar_bl" type="box" size="0.12 0.08 4" pos="-6 -5 4" material="metal_dark"/>
+    <geom name="pillar_br" type="box" size="0.12 0.08 4" pos=" 6 -5 4" material="metal_dark"/>
+    <geom name="pillar_ml" type="box" size="0.12 0.08 4" pos="-6  1 4" material="metal_dark"/>
+    <geom name="pillar_mr" type="box" size="0.12 0.08 4" pos=" 6  1 4" material="metal_dark"/>
+
+    <!-- Ceiling truss between pillars -->
+    <geom name="truss_l" type="box" size="0.05 6 0.08" pos="-6 -2 7.6" material="metal_dark"/>
+    <geom name="truss_r" type="box" size="0.05 6 0.08" pos=" 6 -2 7.6" material="metal_dark"/>
+    <geom name="truss_b" type="box" size="7 0.05 0.08" pos="0 -5 7.6" material="metal_dark"/>
+    <geom name="truss_f" type="box" size="7 0.05 0.08" pos="0  1 7.6" material="metal_dark"/>
+
+    <!-- ── Overhead industrial lights ─────────────────────────────── -->
+    <geom name="rail_l" type="box" size="0.04 5.5 0.03" pos="-2 -2.5 7.55" material="metal_dark"/>
+    <geom name="rail_r" type="box" size="0.04 5.5 0.03" pos=" 2 -2.5 7.55" material="metal_dark"/>
+
+    <!-- Light fixtures + sources (3×2 grid) -->
+    <geom name="lf_11" type="box" size="0.35 0.1 0.06" pos="-2 -4 7.48" material="light_panel"/>
+    <light name="l_11" pos="-2 -4 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <geom name="lf_12" type="box" size="0.35 0.1 0.06" pos="-2 -2 7.48" material="light_panel"/>
+    <light name="l_12" pos="-2 -2 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <geom name="lf_13" type="box" size="0.35 0.1 0.06" pos="-2  0 7.48" material="light_panel"/>
+    <light name="l_13" pos="-2  0 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <geom name="lf_21" type="box" size="0.35 0.1 0.06" pos=" 2 -4 7.48" material="light_panel"/>
+    <light name="l_21" pos=" 2 -4 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <geom name="lf_22" type="box" size="0.35 0.1 0.06" pos=" 2 -2 7.48" material="light_panel"/>
+    <light name="l_22" pos=" 2 -2 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <geom name="lf_23" type="box" size="0.35 0.1 0.06" pos=" 2  0 7.48" material="light_panel"/>
+    <light name="l_23" pos=" 2  0 7.0" dir="0 0 -1" directional="false"
+           diffuse="0.88 0.86 0.80" specular="0.1 0.1 0.1" attenuation="1 0 0.03"/>
+
+    <!-- ── Manipulation cubes ──────────────────────────────────────── -->
+    <body name="cube_red" pos="0.5 0.0 0.025">
+      <freejoint/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0.9 0.2 0.2 1" mass="0.05"/>
+    </body>
+    <body name="cube_green" pos="0.5 0.1 0.025">
+      <freejoint/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0.2 0.8 0.2 1" mass="0.05"/>
+    </body>
+    <body name="cube_blue" pos="0.5 -0.1 0.025">
+      <freejoint/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0.2 0.3 0.9 1" mass="0.05"/>
+    </body>
+
+    <!-- ── Robot mount platform ────────────────────────────────────── -->
+    <geom name="platform_top"  type="box" size="0.25 0.25 0.03"  pos="0 0 0.03"  material="metal_mid"/>
+    <geom name="platform_body" type="box" size="0.22 0.22 0.015" pos="0 0 0.015" material="metal_dark"/>
+
+    <!-- Work table (side) -->
+    <geom name="wtable_top"   type="box" size="0.7 0.45 0.025" pos="-1.4 -0.6 0.78" material="metal_mid"/>
+    <geom name="wtable_leg_a" type="box" size="0.04 0.04 0.39"  pos="-1.92 -1.0 0.39" material="metal_dark"/>
+    <geom name="wtable_leg_b" type="box" size="0.04 0.04 0.39"  pos="-0.88 -1.0 0.39" material="metal_dark"/>
+    <geom name="wtable_leg_c" type="box" size="0.04 0.04 0.39"  pos="-1.92 -0.2 0.39" material="metal_dark"/>
+    <geom name="wtable_leg_d" type="box" size="0.04 0.04 0.39"  pos="-0.88 -0.2 0.39" material="metal_dark"/>
+    <geom name="tool_box"  type="box" size="0.12 0.08 0.07" pos="-1.2 -0.7 0.87" material="safety_red"/>
+    <geom name="tool_box2" type="box" size="0.08 0.06 0.05" pos="-1.65 -0.5 0.845" material="metal_dark"/>
+
+    <!-- ── Safety floor markings ───────────────────────────────────── -->
+    <geom name="stripe_n"   type="box" size="0.9 0.045 0.001" pos="0 -1.1 0.001" material="yellow_stripe"/>
+    <geom name="stripe_s"   type="box" size="0.9 0.045 0.001" pos="0  1.1 0.001" material="yellow_stripe"/>
+    <geom name="stripe_w"   type="box" size="0.045 1.1 0.001" pos="-0.9 0 0.001" material="yellow_stripe"/>
+    <geom name="stripe_e"   type="box" size="0.045 1.1 0.001" pos=" 0.9 0 0.001" material="yellow_stripe"/>
+    <geom name="stripe_cnw" type="box" size="0.13 0.045 0.001" pos="-0.83 -1.06 0.001" euler="0 0 45"  material="yellow_stripe"/>
+    <geom name="stripe_cne" type="box" size="0.13 0.045 0.001" pos=" 0.83 -1.06 0.001" euler="0 0 -45" material="yellow_stripe"/>
+    <geom name="stripe_csw" type="box" size="0.13 0.045 0.001" pos="-0.83  1.06 0.001" euler="0 0 -45" material="yellow_stripe"/>
+    <geom name="stripe_cse" type="box" size="0.13 0.045 0.001" pos=" 0.83  1.06 0.001" euler="0 0 45"  material="yellow_stripe"/>
+
+    <!-- ── Conveyor belt (decorative/static) ───────────────────────── -->
+    <geom name="conv_l_rail"  type="box" size="2.2 0.06 0.05" pos="3.5 -2.2 0.62" material="metal_dark"/>
+    <geom name="conv_r_rail"  type="box" size="2.2 0.06 0.05" pos="3.5 -2.7 0.62" material="metal_dark"/>
+    <geom name="conv_surface" type="box" size="2.2 0.25 0.02" pos="3.5 -2.45 0.67" material="rubber_belt"/>
+    <geom name="conv_leg_a"   type="box" size="0.05 0.05 0.33" pos="1.4 -2.45 0.33" material="metal_dark"/>
+    <geom name="conv_leg_b"   type="box" size="0.05 0.05 0.33" pos="5.6 -2.45 0.33" material="metal_dark"/>
+    <geom name="conv_roll_a"  type="cylinder" size="0.06 0.25" pos="1.4 -2.45 0.65" euler="90 0 0" material="metal_light"/>
+    <geom name="conv_roll_b"  type="cylinder" size="0.06 0.25" pos="5.6 -2.45 0.65" euler="90 0 0" material="metal_light"/>
+    <geom name="conv_box_a"   type="box" size="0.12 0.1 0.1" pos="2.8 -2.45 0.77" material="metal_dark"/>
+    <geom name="conv_box_b"   type="box" size="0.10 0.09 0.09" pos="4.2 -2.45 0.77" material="safety_red"/>
+
+    <!-- ── Shelving rack (background) ──────────────────────────────── -->
+    <geom name="rack_post_fl" type="box" size="0.04 0.04 2.0" pos="-5.5 -1.5 2.0" material="metal_dark"/>
+    <geom name="rack_post_fr" type="box" size="0.04 0.04 2.0" pos="-3.5 -1.5 2.0" material="metal_dark"/>
+    <geom name="rack_post_bl" type="box" size="0.04 0.04 2.0" pos="-5.5 -4.5 2.0" material="metal_dark"/>
+    <geom name="rack_post_br" type="box" size="0.04 0.04 2.0" pos="-3.5 -4.5 2.0" material="metal_dark"/>
+    <geom name="rack_shelf_1" type="box" size="1.05 1.55 0.025" pos="-4.5 -3.0 0.6"  material="metal_mid"/>
+    <geom name="rack_shelf_2" type="box" size="1.05 1.55 0.025" pos="-4.5 -3.0 1.2"  material="metal_mid"/>
+    <geom name="rack_shelf_3" type="box" size="1.05 1.55 0.025" pos="-4.5 -3.0 1.85" material="metal_mid"/>
+    <geom name="rack_b1a"     type="box" size="0.14 0.12 0.11" pos="-5.2 -2.4 0.735" material="metal_dark"/>
+    <geom name="rack_b1b"     type="box" size="0.12 0.14 0.10" pos="-4.8 -3.5 0.725" material="safety_red"/>
+    <geom name="rack_b2a"     type="box" size="0.16 0.10 0.12" pos="-5.1 -2.8 1.345" material="metal_mid"/>
+    <geom name="rack_b3a"     type="box" size="0.18 0.12 0.09" pos="-4.6 -2.6 1.965" material="safety_red"/>
+  </worldbody>
+</mujoco>
