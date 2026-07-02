@@ -40,6 +40,7 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
 from connection import ConnectionManager
 from logger import log_info
 from sip import SIPServer
+from webtransport import WebTransportServer
 
 
 def in_venv():
@@ -47,6 +48,7 @@ def in_venv():
 
 
 connections = ConnectionManager()
+webtransport_server: "WebTransportServer | None" = None
 
 
 class HTTPServer:
@@ -63,6 +65,7 @@ class HTTPServer:
         self.app.router.add_delete("/connection/{connection_id}", self.delete_connection)
         self.app.router.add_put("/connection/{connection_id}", self.update_connection)
         self.app.router.add_get("/metrics", self.metrics_endpoint)
+        self.app.router.add_get("/webtransport-info", self.webtransport_info)
         self.app.router.add_static("/demo", os.path.join(os.path.dirname(__file__), "demo"))
 
     async def _on_shutdown(self, app):
@@ -189,6 +192,20 @@ class HTTPServer:
             charset="utf-8",
         )
 
+    async def webtransport_info(self, request):
+        """Connection info for the WebTransport demo page (port + self-signed cert hash, if any)."""
+        if not webtransport_server:
+            raise web.HTTPNotFound(text="WebTransport server not running")
+        return web.Response(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "port": webtransport_server.port,
+                    "certificateHash": webtransport_server.certificate_hash_b64,
+                }
+            ),
+        )
+
 
 def _on_connection_closed(conn_info):
     """Callback invoked when a connection is closed."""
@@ -275,8 +292,30 @@ async def _tool_call_request(connection, tool_name, tool_id, parameters, tools, 
         return {"error": str(e)}
 
 
-async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_url):
-    """Run both the web app and SIP server concurrently."""
+async def _on_webtransport_session(pc, params):
+    """Called once a WebTransport/raw-QUIC session sends its init control message
+    (JSON with the same fields as the HTTP /connection body, minus 'sdp')."""
+    log_info(f"WebTransport session starting model={params.get('model')} metadata={params.get('metadata')}")
+
+    conn_info = connections.create_connection(callback=params.get("callback"), metadata=params.get("metadata"))
+    try:
+        await conn_info.connection.start_webtransport(
+            pc,
+            model=params.get("model"),
+            system_instructions=params.get("system_instructions"),
+            tools=params.get("tools"),
+            voice=params.get("voice"),
+            language=params.get("language"),
+            api_key=params.get("api_key"),
+            script=params.get("script"),
+        )
+    except Exception:
+        connections.remove_connection(conn_info)
+        raise
+
+
+async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_url, wt_host, wt_port, wt_ssl_context):
+    """Run the web app, SIP server and WebTransport/QUIC server concurrently."""
     # Setup all models before starting the servers
     # from connection import MODEL_MAP
 
@@ -289,12 +328,21 @@ async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_
     #     except Exception as e:
     #         log_info(f"Error setting up model class {model_cls.__name__}: {e}")
 
+    global webtransport_server
+
     http_server = HTTPServer(host=host, port=port, ssl_context=ssl_context)
     sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)
+    webtransport_server = WebTransportServer(
+        host=wt_host,
+        port=wt_port,
+        on_session=_on_webtransport_session,
+        certificate=wt_ssl_context[0] if wt_ssl_context else None,
+        private_key=wt_ssl_context[1] if wt_ssl_context else None,
+    )
 
-    # Wait for both to complete (or until one fails)
+    # Wait for all to complete (or until one fails)
     try:
-        await asyncio.gather(http_server.start(), sip_server.start())
+        await asyncio.gather(http_server.start(), sip_server.start(), webtransport_server.start())
     except Exception as e:
         log_info(f"Error running servers: {e}")
         raise
@@ -312,6 +360,10 @@ if __name__ == "__main__":
     parser.add_argument("--sip-host", default=None)
     parser.add_argument("--sip-port", type=int, default=5060)
     parser.add_argument("--sip-callback-url")
+    parser.add_argument("--wt-host", default="0.0.0.0")
+    parser.add_argument("--wt-port", type=int, default=4433)
+    parser.add_argument("--wt-cert-file")
+    parser.add_argument("--wt-key-file")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -326,6 +378,17 @@ if __name__ == "__main__":
     else:
         ssl_context = None
 
+    wt_ssl_context = None
+    if args.wt_cert_file:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        from cryptography.x509 import load_pem_x509_certificate
+
+        with open(args.wt_cert_file, "rb") as f:
+            wt_certificate = load_pem_x509_certificate(f.read())
+        with open(args.wt_key_file, "rb") as f:
+            wt_private_key = load_pem_private_key(f.read(), password=None)
+        wt_ssl_context = (wt_certificate, wt_private_key)
+
     # Load all scripts from scripts folder
     from script_manager import load_all_scripts
 
@@ -339,5 +402,8 @@ if __name__ == "__main__":
             args.sip_host,
             args.sip_port,
             args.sip_callback_url,
+            args.wt_host,
+            args.wt_port,
+            wt_ssl_context,
         )
     )

@@ -236,9 +236,8 @@ class Connection:
         self._connecting = False
         self._closing = False
 
-    async def start(
+    async def _prepare(
         self,
-        sdp,
         model,
         system_instructions=None,
         tools=None,
@@ -247,10 +246,7 @@ class Connection:
         api_key=None,
         script=None,
     ):
-        """Start the RTC connection with the given parameters"""
-        self.debug(
-            f"Starting with {model} {system_instructions} {tools} {voice} {language} {'***' if api_key else 'None'} {'with dynamic script' if script else 'no script'}"
-        )
+        """Create/setup/connect models. Shared by every transport's start_*() method."""
         self.system_instructions = system_instructions
         self.script = script
         self.tools = tools
@@ -295,6 +291,23 @@ class Connection:
         for m in self.models:
             asyncio.ensure_future(self._run_recv_genai(m))
 
+    async def start(
+        self,
+        sdp,
+        model,
+        system_instructions=None,
+        tools=None,
+        voice=None,
+        language=None,
+        api_key=None,
+        script=None,
+    ):
+        """Start the RTC connection with the given parameters"""
+        self.debug(
+            f"Starting with {model} {system_instructions} {tools} {voice} {language} {'***' if api_key else 'None'} {'with dynamic script' if script else 'no script'}"
+        )
+        await self._prepare(model, system_instructions, tools, voice, language, api_key, script)
+
         is_webrtc = "fingerprint" in sdp
         from sip.peerconnection import SimplePeerConnection
 
@@ -336,6 +349,32 @@ class Connection:
         sdp_response = re.sub(r"^a=fingerprint:sha-(384|512) .*\r\n", "", sdp_response, flags=re.MULTILINE)
 
         return sdp_response
+
+    async def start_webtransport(
+        self,
+        pc,
+        model,
+        system_instructions=None,
+        tools=None,
+        voice=None,
+        language=None,
+        api_key=None,
+        script=None,
+    ):
+        """Start a connection driven by a WebTransport/raw-QUIC peer connection (see webtransport/session.py)."""
+        self.debug(
+            f"Starting (webtransport) with {model} {system_instructions} {tools} {voice} {language} {'***' if api_key else 'None'}"
+        )
+        await self._prepare(model, system_instructions, tools, voice, language, api_key, script)
+
+        self.pc = pc
+        self.last_message_time = time.time()
+        self.start_time = time.time()
+
+        self.send_video_track = SendingTrack("video")
+        self.pc.addTrack(self.send_video_track)
+
+        asyncio.ensure_future(self._run())
 
     def debug(self, msg, *args):
         log_debug(msg, *args, context=self.id)
@@ -697,11 +736,13 @@ class Connection:
         self.info(f"Connection stopped. Transcript: {len(self.transcript)}.")
 
     async def _timeout_monitor(self, info):
-        """Monitor for timeout - close connection if no messages received for 1 minute"""
+        """Monitor for timeout - close connection if no messages received for 1 minute
+        (or 30 minutes if the connection has no audio track)"""
         while self.pc and self.pc.connectionState != "closed":
             await asyncio.sleep(5)  # Check every 5 seconds
-            if self.last_message_time and time.time() - self.last_message_time > 60:
-                self.info("Connection timed out - no messages received for 1 minute")
+            timeout = 60 if self.recv_audio_track else 30 * 60
+            if self.last_message_time and time.time() - self.last_message_time > timeout:
+                self.info(f"Connection timed out - no messages received for {timeout} seconds")
                 asyncio.ensure_future(self.close())
                 break
 
