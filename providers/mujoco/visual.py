@@ -187,27 +187,27 @@ class MujocoModel(Model):
 
     async def _sim_loop(self):
         loop = asyncio.get_event_loop()
-        next_frame_time = 0.0
+        frame_interval = self._sim.frame_interval
+        steps_per_frame = max(1, round(frame_interval / self._sim.timestep))
+        start_wall = time.perf_counter()
+        frame_count = 0
         try:
             while self._running:
-                loop_start = time.perf_counter()
+                for _ in range(steps_per_frame):
+                    await loop.run_in_executor(self._executor, self._sim.step)
 
-                await loop.run_in_executor(self._executor, self._sim.step)
+                frame_arr = await loop.run_in_executor(self._executor, self._sim.render)  # same executor thread as step()
+                if frame_arr is not None:
+                    vf = VideoFrame.from_ndarray(frame_arr, format="rgb24")
+                    if self._frame_queue.full():
+                        try:
+                            self._frame_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            pass
+                    self._frame_queue.put_nowait(vf)
 
-                if self._sim.sim_time >= next_frame_time:
-                    frame_arr = await loop.run_in_executor(self._executor, self._sim.render)  # same executor thread as step()
-                    if frame_arr is not None:
-                        vf = VideoFrame.from_ndarray(frame_arr, format="rgb24")
-                        if self._frame_queue.full():
-                            try:
-                                self._frame_queue.get_nowait()
-                            except asyncio.QueueEmpty:
-                                pass
-                        self._frame_queue.put_nowait(vf)
-                    next_frame_time += self._sim.frame_interval
-
-                elapsed = time.perf_counter() - loop_start
-                sleep_time = self._sim.timestep - elapsed
+                frame_count += 1
+                sleep_time = (start_wall + frame_count * frame_interval) - time.perf_counter()
                 if sleep_time > 0:
                     await asyncio.sleep(sleep_time)
         except asyncio.CancelledError:
