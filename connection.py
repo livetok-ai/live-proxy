@@ -54,6 +54,12 @@ try:
     )
     from av import AudioFrame, VideoFrame
 
+    from rtp_extensions import install_playout_delay_extension
+
+    # install_playout_delay_extension(min_ms=0, max_ms=0)
+
+    from port_range import get_sip_port_range, get_webrtc_port_range, restrict_ice_gathering_port_range
+
     import metrics
     from logger import log_debug, log_info, log_warn
     from model import Model, ModelEvents
@@ -235,6 +241,7 @@ class Connection:
         self.public_ip = public_ip
         self._connecting = False
         self._closing = False
+        self._recv_genai_tasks = []
 
     async def _prepare(
         self,
@@ -277,6 +284,13 @@ class Connection:
             m.on(ModelEvents.INPUT_TRANSCRIPTION, self._on_input_transcription)
             m.on(ModelEvents.OUTPUT_TRANSCRIPTION, self._on_output_transcription)
             m.on(ModelEvents.INTERRUPTED, self._on_interrupted)
+            # detection/classification providers (YOLO "objects", OCR "texts",
+            # face-landmarker "sentiment", ...) — harmless no-op for models
+            # that never emit these
+            provider_name, _ = parse_model(m.name or "")
+            m.on("objects", lambda items, _p=provider_name: self._on_detection_event(_p, items))
+            m.on("texts", lambda items, _p=provider_name: self._on_detection_event(_p, items))
+            m.on("sentiment", lambda item, _p=provider_name: self._on_detection_event(_p, item))
 
         self._connecting = True
 
@@ -289,7 +303,8 @@ class Connection:
 
         # 5) Start model-specific tasks (starting receiver tasks)
         for m in self.models:
-            asyncio.ensure_future(self._run_recv_genai(m))
+            task = asyncio.ensure_future(self._run_recv_genai(m))
+            self._recv_genai_tasks.append(task)
 
     async def start(
         self,
@@ -310,6 +325,13 @@ class Connection:
 
         is_webrtc = "fingerprint" in sdp
         from sip.peerconnection import SimplePeerConnection
+
+        port_range = get_webrtc_port_range() if is_webrtc else get_sip_port_range()
+        self.info(
+            "Using %s port range: %s",
+            "webrtc" if is_webrtc else "sip",
+            f"{port_range[0]}-{port_range[1]}" if port_range else "default (ephemeral)",
+        )
 
         self.pc = (
             RTCPeerConnection(
@@ -335,7 +357,11 @@ class Connection:
         self._add_video_track_if_needed()
 
         answer = await self.pc.createAnswer()
-        await self.pc.setLocalDescription(answer)
+        if is_webrtc:
+            async with restrict_ice_gathering_port_range(port_range):
+                await self.pc.setLocalDescription(answer)
+        else:
+            await self.pc.setLocalDescription(answer)
 
         sdp_response = _reorder_video_codecs(self.pc.localDescription.sdp)
         found = re.findall(r"a=rtpmap:(\d+) opus/48000/2", sdp_response)
@@ -453,6 +479,17 @@ class Connection:
         for m in self.models:
             if isinstance(m, (Gemini, OpenAI)):
                 m._emit("response", {"text": text})
+
+    def _on_detection_event(self, provider_name: str, items):
+        """Forward provider detection/classification results (YOLO objects,
+        OCR texts, face-landmarker sentiment, ...) to connected clients over
+        the data channel so the UI can log them as timeline events."""
+        if items is None:
+            items = []
+        elif not isinstance(items, (list, tuple, set)):
+            items = [items]
+        message = json.dumps({"type": "detections", "provider": provider_name, "items": list(items)})
+        self._broadcast_to_channels(message)
 
     MAX_DATA_CHANNELS = 10
 
@@ -771,6 +808,12 @@ class Connection:
         self.models = []
         for m in models_to_close:
             await m.close()
+
+        recv_tasks, self._recv_genai_tasks = self._recv_genai_tasks, []
+        for t in recv_tasks:
+            t.cancel()
+        if recv_tasks:
+            await asyncio.gather(*recv_tasks, return_exceptions=True)
 
     @property
     def data_channel(self):

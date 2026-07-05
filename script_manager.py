@@ -69,6 +69,7 @@ class JavaScriptScript:
 
         def py_connection_close():
             import asyncio
+
             asyncio.create_task(connection.close())
 
         ctx.add_callable("py_connection_close", py_connection_close)

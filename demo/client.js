@@ -126,7 +126,7 @@ async function negotiate() {
     appendAddon('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    appendAddon('yolo[draw=true]');
+    appendAddon('yolo[draw=true,sampling=15]');
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
     appendAddon('face_landmarker[draw=true]');
@@ -135,10 +135,10 @@ async function negotiate() {
     appendAddon('text_sentiment');
   }
   if (document.getElementById('provider-sam2')?.checked) {
-    appendAddon('sam[version=sam2.1_t.pt,draw=true]');
+    appendAddon('sam[version=sam2.1_t.pt,draw=true,sampling=15]');
   }
   if (document.getElementById('provider-sam3')?.checked) {
-    appendAddon('sam[version=sam2.1_t.pt,draw=true]');
+    appendAddon('sam[version=sam2.1_t.pt,draw=true,sampling=15]');
   }
   if (document.getElementById('provider-inception')?.checked) {
     appendAddon('inception');

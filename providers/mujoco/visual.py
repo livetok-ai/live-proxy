@@ -29,22 +29,23 @@ _ZOOM_MAX = 10.0
 _ZOOM_INIT = 3.0
 
 _KEY_JOINTS = {
-    "arrowup":    [(1,  1)],
-    "arrowdown":  [(1, -1)],
-    "arrowleft":  [(0,  1)],
+    "arrowup": [(1, 1)],
+    "arrowdown": [(1, -1)],
+    "arrowleft": [(0, 1)],
     "arrowright": [(0, -1)],
-    "a":          [(3, -1)],
-    "q":          [(3,  1)],
-    "w":          [(5, -1)],
-    "s":          [(5,  1)],
-    "e":          [(7,  1), (8,  1)],
-    "d":          [(7, -1), (8, -1)],
+    "a": [(3, -1)],
+    "q": [(3, 1)],
+    "w": [(5, -1)],
+    "s": [(5, 1)],
+    "e": [(7, 1), (8, 1)],
+    "d": [(7, -1), (8, -1)],
 }
 
 
 # ---------------------------------------------------------------------------
 # Inline simulation engine (no dependency on mujoco/provider/mujoco.py)
 # ---------------------------------------------------------------------------
+
 
 class _Sim:
     """Thin wrapper around MuJoCo model/data/renderer.  All methods are
@@ -137,14 +138,31 @@ class _Sim:
             for joint_idx, direction in _KEY_JOINTS.get(key, []):
                 lo = self._model.jnt_range[joint_idx, 0]
                 hi = self._model.jnt_range[joint_idx, 1]
-                self._target_qpos[joint_idx] = float(np.clip(
-                    self._target_qpos[joint_idx] + direction * _KEY_DELTA, lo, hi,
-                ))
+                self._target_qpos[joint_idx] = float(
+                    np.clip(
+                        self._target_qpos[joint_idx] + direction * _KEY_DELTA,
+                        lo,
+                        hi,
+                    )
+                )
+
+
+# ---------------------------------------------------------------------------
+# Scene registry — maps a `robot` param to a scene XML under ./scenes
+# ---------------------------------------------------------------------------
+
+_SCENES_DIR = os.path.join(os.path.dirname(__file__), "scenes")
+_ROBOT_SCENES = {
+    "arm": os.path.join(_SCENES_DIR, "franka_emika_panda", "scene_factory.xml"),
+    "quadruped": os.path.join(_SCENES_DIR, "boston_dynamics_spot", "scene.xml"),
+    "drone": os.path.join(_SCENES_DIR, "bitcraze_crazyflie_2", "scene.xml"),
+}
 
 
 # ---------------------------------------------------------------------------
 # live-proxy Model
 # ---------------------------------------------------------------------------
+
 
 class MujocoModel(Model):
     """In-process MuJoCo simulation provider for live-proxy.
@@ -164,10 +182,9 @@ class MujocoModel(Model):
 
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
-        _default = os.path.abspath(os.path.join(
-            os.path.dirname(__file__), "scenes", "franka_emika_panda", "scene_factory.xml"
-        ))
-        scene_xml = kwargs.get("scene_xml") or os.getenv("MUJOCO_SCENE_XML") or _default
+        _default = _ROBOT_SCENES["arm"]
+        robot = kwargs.get("robot")
+        scene_xml = kwargs.get("scene_xml") or _ROBOT_SCENES.get(robot) or os.getenv("MUJOCO_SCENE_XML") or _default
         fps = int(kwargs.get("fps", 30))
         width = int(kwargs.get("width", 1280))
         height = int(kwargs.get("height", 720))
@@ -196,7 +213,9 @@ class MujocoModel(Model):
                 for _ in range(steps_per_frame):
                     await loop.run_in_executor(self._executor, self._sim.step)
 
-                frame_arr = await loop.run_in_executor(self._executor, self._sim.render)  # same executor thread as step()
+                frame_arr = await loop.run_in_executor(
+                    self._executor, self._sim.render
+                )  # same executor thread as step()
                 if frame_arr is not None:
                     vf = VideoFrame.from_ndarray(frame_arr, format="rgb24")
                     if self._frame_queue.full():

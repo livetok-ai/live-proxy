@@ -537,6 +537,7 @@ async def test_js_async_add_tool(tmp_path):
 async def test_js_connection_close(tmp_path):
     """Test that connection.close() can be called from a JavaScript script and initiates connection closing."""
     import asyncio
+
     conn = Connection()
 
     # Write a simple JS script that calls connection.close()

@@ -102,6 +102,24 @@ const answer = await response.json();
 await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
 ```
 
+### WebTransport / raw QUIC Integration
+
+The proxy also runs a QUIC server (default UDP port `4433`, override with `--wt-port`) that accepts both
+browser [WebTransport](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport) sessions (over HTTP/3)
+and raw QUIC clients on a `live-proxy-quic` ALPN, without needing an SDP offer/answer exchange.
+
+A client opens a single bidirectional stream and writes length-prefixed binary frames
+(`[4B length][1B type][8B timestamp_us][type-specific extra][payload]`, see `webtransport/protocol.py`):
+type `1` for audio (raw PCM s16le, extra = sample rate + channel count), type `2` for video (JPEG, extra = keyframe
+flag), and type `3` for control messages (UTF-8 JSON). The very first control frame must carry the connection
+parameters (`model`, `system_instructions`, `tools`, `voice`, `language`, `api_key`, `metadata`, ...) — the same
+fields as the `/connection` HTTP body, minus `sdp`.
+
+Try it live at `http://localhost:8080/demo/webtransport.html` (works with the server's own ephemeral, short-lived
+self-signed certificate — the page fetches its SHA-256 hash from `GET /webtransport-info` and pins it via
+`serverCertificateHashes`). Pass `--wt-cert-file`/`--wt-key-file` to use a real certificate instead. Raw QUIC can't
+be driven from a browser (no raw socket API); see `tests/test_webtransport.py` for a scripted client example.
+
 ## Features
 
 - ✅ **WebRTC interface** - Real-time peer-to-peer communication
@@ -111,7 +129,7 @@ await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
 - ✅ **Data channels** - Send and receive messages alongside media
 - ✅ **Gemini integration** - Google's Gemini 2.0 multimodal models
 - ✅ **OpenAI integration** - OpenAI's GPT-4 real-time API
-- 🚧 **WebTransport interface** - Work in progress
+- ✅ **WebTransport interface** - HTTP/3 WebTransport and raw QUIC support
 - 📋 **HTTP real-time control interface** - Planned
 
 ## Documentation

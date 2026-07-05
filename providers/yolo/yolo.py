@@ -60,6 +60,7 @@ class YoloProvider(Model):
         self.frame_count = 0
         self.last_drawn_boxes = []
         self.output_queue = asyncio.Queue()
+        self._processing = False
         log_info(
             f"YOLO provider model: {self.model} draw_detections: {self.draw_detections} sampling_rate: {self.sampling_rate}"
         )
@@ -104,36 +105,10 @@ class YoloProvider(Model):
         should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
 
         if self.input_enabled and should_process:
-            # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(None, lambda: self.model(input, verbose=False))
-
-            detected = set()
-            self.last_drawn_boxes = []
-
-            if results and len(results) > 0:
-                result = results[0]
-                if hasattr(result, "boxes") and result.boxes is not None:
-                    for b in result.boxes:
-                        if b.cls is not None:
-                            class_id = int(b.cls)
-                            if class_id in self.model.names:
-                                label = self.model.names[class_id]
-                                detected.add(label)
-                                if hasattr(b, "xyxy") and b.xyxy is not None:
-                                    coords = b.xyxy[0].tolist()
-                                    conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
-                                    color = self.get_color(label)
-                                    self.last_drawn_boxes.append(
-                                        {"coords": coords, "label": label, "conf": conf, "color": color}
-                                    )
-
-            if detected != self.last_detections:
-                sorted_detections = sorted(detected)
-                log_info(f"YOLO detections changed: {sorted_detections}")
-                self.last_detections = detected
-                self._emit("detections_changed", sorted_detections)
-                self._emit("objects", sorted_detections)
+            # Drop this frame's inference if the previous one is still processing
+            if not self._processing:
+                self._processing = True
+                asyncio.ensure_future(self._process_frame(input))
         elif not self.input_enabled:
             self.last_drawn_boxes = []
             self.last_detections = set()
@@ -180,6 +155,41 @@ class YoloProvider(Model):
 
             limit_queue_size(self.output_queue, 10)
             self.output_queue.put_nowait(new_frame)
+
+    async def _process_frame(self, input: Image):
+        try:
+            # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(None, lambda: self.model(input, verbose=False))
+
+            detected = set()
+            drawn_boxes = []
+
+            if results and len(results) > 0:
+                result = results[0]
+                if hasattr(result, "boxes") and result.boxes is not None:
+                    for b in result.boxes:
+                        if b.cls is not None:
+                            class_id = int(b.cls)
+                            if class_id in self.model.names:
+                                label = self.model.names[class_id]
+                                detected.add(label)
+                                if hasattr(b, "xyxy") and b.xyxy is not None:
+                                    coords = b.xyxy[0].tolist()
+                                    conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
+                                    color = self.get_color(label)
+                                    drawn_boxes.append({"coords": coords, "label": label, "conf": conf, "color": color})
+
+            self.last_drawn_boxes = drawn_boxes
+
+            if detected != self.last_detections:
+                sorted_detections = sorted(detected)
+                log_info(f"YOLO detections changed: {sorted_detections}")
+                self.last_detections = detected
+                self._emit("detections_changed", sorted_detections)
+                self._emit("objects", sorted_detections)
+        finally:
+            self._processing = False
 
     async def recv(self) -> AsyncIterator[Output]:
         while True:

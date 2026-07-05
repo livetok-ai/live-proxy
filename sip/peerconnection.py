@@ -8,12 +8,18 @@ from aiortc.rtcrtpreceiver import RemoteStreamTrack
 from aiortc.rtp import RtpPacket
 from pyee.asyncio import AsyncIOEventEmitter
 
+from port_range import bind_udp_socket_in_range, get_sip_port_range
+
 
 class SimplePeerConnection(AsyncIOEventEmitter):
     def __init__(self, public_ip):
         super().__init__()
-        self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__socket.bind(("0.0.0.0", 0))
+        port_range = get_sip_port_range()
+        if port_range:
+            self.__socket = bind_udp_socket_in_range("0.0.0.0", port_range)
+        else:
+            self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.__socket.bind(("0.0.0.0", 0))
         self.__socket.setblocking(False)
         self.__public_ip = public_ip
         self.__remote_address = None
