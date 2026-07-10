@@ -15,7 +15,7 @@ from logger import log_info
 from model import Input, Model, Output
 
 
-class Insivision(Model):
+class InsivisionProvider(Model):
     @property
     def supports_audio(self) -> bool:
         return False

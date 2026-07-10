@@ -122,11 +122,13 @@ async function negotiate() {
     model = model ? model + ';' + addon : addon;
   };
 
+  const sampling = Math.max(1, parseInt(document.getElementById('video-sampling')?.value, 10) || 10);
+
   if (document.getElementById('provider-simli')?.checked) {
     appendAddon('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    appendAddon('yolo[draw=true,sampling=15]');
+    appendAddon(`yolo[draw=true,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
     appendAddon('face_landmarker[draw=true]');
@@ -135,13 +137,16 @@ async function negotiate() {
     appendAddon('text_sentiment');
   }
   if (document.getElementById('provider-sam2')?.checked) {
-    appendAddon('sam[version=sam2.1_t.pt,draw=true,sampling=15]');
+    appendAddon(`sam[version=sam2.1_t.pt,draw=true,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-sam3')?.checked) {
-    appendAddon('sam[version=sam2.1_t.pt,draw=true,sampling=15]');
+    appendAddon(`sam[version=sam2.1_t.pt,draw=true,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-inception')?.checked) {
     appendAddon('inception');
+  }
+  if (document.getElementById('provider-gemini-robotics')?.checked) {
+    appendAddon(`gemini-robotics[draw=true,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-insivision')?.checked) {
     appendAddon('insivision');
@@ -425,8 +430,9 @@ const handleProviderChange = () => {
   const inceptionChecked = document.getElementById('provider-inception')?.checked;
   const insivisionChecked = document.getElementById('provider-insivision')?.checked;
   const mujocoChecked = document.getElementById('provider-mujoco')?.checked;
+  const geminiRoboticsChecked = document.getElementById('provider-gemini-robotics')?.checked;
 
-  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked) {
+  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiRoboticsChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
@@ -445,6 +451,7 @@ document.getElementById('provider-face-landmarker')?.addEventListener('change', 
 document.getElementById('provider-sam2')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-sam3')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-inception')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-gemini-robotics')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
 

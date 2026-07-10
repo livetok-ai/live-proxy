@@ -15,7 +15,7 @@ SAMPLE_RATE = 24000
 AUDIO_PTIME = 0.02
 
 
-class OpenAI(Model):
+class OpenAIProvider(Model):
     @property
     def is_llm(self) -> bool:
         return True
@@ -133,8 +133,8 @@ class OpenAI(Model):
 @contextlib.asynccontextmanager
 async def connect_openai(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
-) -> AsyncGenerator[OpenAI, None]:
-    openai = OpenAI(
+) -> AsyncGenerator[OpenAIProvider, None]:
+    openai = OpenAIProvider(
         name=model,
         system_instructions=system_instructions,
         tools=tools,

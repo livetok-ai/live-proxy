@@ -119,8 +119,8 @@ class TestConnection:
         mock_pc.getTransceivers.return_value = [mock_transceiver]
         conn.pc = mock_pc
 
-        from providers.sam3.sam3 import SamProvider
-        from providers.yolo.yolo import YoloProvider
+        from providers.sam3 import SamProvider
+        from providers.yolo import YoloProvider
 
         # Mock the connect methods to do nothing
         with patch.object(YoloProvider, "connect", new_callable=AsyncMock):

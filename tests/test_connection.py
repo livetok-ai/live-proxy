@@ -36,7 +36,7 @@ def test_split_models():
 @pytest.mark.asyncio
 async def test_add_model_kwargs():
     from connection import Connection
-    from providers.yolo.yolo import YoloProvider
+    from providers.yolo import YoloProvider
 
     conn = Connection()
     with pytest.MonkeyPatch().context() as mp:
@@ -56,8 +56,8 @@ async def test_add_model_kwargs():
 @pytest.mark.asyncio
 async def test_connection_run_setup_before_connect():
     from connection import Connection
-    from providers.inception.inception import InceptionProvider
-    from providers.yolo.yolo import YoloProvider
+    from providers.inception import InceptionProvider
+    from providers.yolo import YoloProvider
 
     # Track sequence of actions
     actions = []

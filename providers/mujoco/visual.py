@@ -188,9 +188,7 @@ class _Sim:
         else:
             self._apply_held_keys()
             controlled = {
-                (qpos_addr, dof_addr)
-                for entries in self._key_joints.values()
-                for qpos_addr, dof_addr, _, _ in entries
+                (qpos_addr, dof_addr) for entries in self._key_joints.values() for qpos_addr, dof_addr, _, _ in entries
             }
             nq = self._model.nq
             nv = self._model.nv
@@ -332,7 +330,7 @@ _ROBOT_SCENES = {
 # ---------------------------------------------------------------------------
 
 
-class MujocoModel(Model):
+class MujocoProvider(Model):
     """In-process MuJoCo simulation provider for live-proxy.
 
     Runs physics and rendering in a thread executor so the asyncio event loop

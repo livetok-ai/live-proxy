@@ -4,14 +4,14 @@ import pytest
 from PIL import Image
 
 from model import Model
-from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
-from providers.gemini.llm import Gemini
-from providers.inception.inception import InceptionProvider
-from providers.openai.llm import OpenAI
-from providers.sam3.sam3 import SamProvider
-from providers.simli.visual import Simli
-from providers.text_sentiment.text_sentiment import TextSentimentProvider
-from providers.yolo.yolo import YoloProvider
+from providers.face_landmarker import FaceLandmarkerProvider
+from providers.gemini import GeminiProvider
+from providers.inception import InceptionProvider
+from providers.openai import OpenAIProvider
+from providers.sam3 import SamProvider
+from providers.simli import SimliProvider
+from providers.text_sentiment import TextSentimentProvider
+from providers.yolo import YoloProvider
 from utils import VideoBuffer
 
 
@@ -50,7 +50,7 @@ def test_provider_capabilities():
     assert inception.supports_video is True
 
     # Simli
-    simli = Simli()
+    simli = SimliProvider()
     assert simli.supports_audio is True
     assert simli.supports_text is False
     assert simli.supports_video is False
@@ -62,13 +62,13 @@ def test_provider_capabilities():
     assert sentiment.supports_video is False
 
     # Gemini
-    gemini = Gemini()
+    gemini = GeminiProvider()
     assert gemini.supports_audio is True
     assert gemini.supports_text is True
     assert gemini.supports_video is False
 
     # OpenAI
-    openai = OpenAI()
+    openai = OpenAIProvider()
     assert openai.supports_audio is True
     assert openai.supports_text is True
     assert openai.supports_video is True
@@ -108,7 +108,7 @@ def test_video_buffer():
 async def test_gemini_sampling_and_buffering():
     """Test that Gemini model correctly performs sampling and uses the video buffer."""
     # Sampling = 3, use_video_buffer = True
-    gemini = Gemini(sampling=3, use_video_buffer=True)
+    gemini = GeminiProvider(sampling=3, use_video_buffer=True)
     gemini.session = AsyncMock()
 
     img = Image.new("RGB", (10, 10))
@@ -147,7 +147,7 @@ async def test_gemini_sampling_and_buffering():
 async def test_openai_sampling_and_buffering():
     """Test that OpenAI model correctly performs sampling and uses the video buffer."""
     # Sampling = 2, use_video_buffer = False
-    openai = OpenAI(sampling=2, use_video_buffer=False)
+    openai = OpenAIProvider(sampling=2, use_video_buffer=False)
     openai.session = MagicMock()
     openai.session.conversation = MagicMock()
     openai.session.conversation.item = MagicMock()

@@ -1,10 +1,11 @@
+import asyncio
 import fractions
 
 import numpy as np
 import pytest
 from PIL import Image
 
-from providers.sam3.sam3 import SamProvider
+from providers.sam3 import SamProvider
 
 
 @pytest.mark.asyncio
@@ -150,12 +151,16 @@ async def test_sam3_provider_sampling():
         for _ in range(5):
             await provider.send(img)
 
+        # Inference now runs in the background; give the scheduled task a chance to finish.
+        await asyncio.sleep(0.05)
+
         # SAM model should only be called once (the first frame)
         assert call_count == 1
         assert provider.frame_count == 5
 
         # Send 6th frame
         await provider.send(img)
+        await asyncio.sleep(0.05)
         # SAM model should be called again (the 6th frame)
         assert call_count == 2
         assert provider.frame_count == 6

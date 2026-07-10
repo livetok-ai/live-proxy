@@ -63,19 +63,20 @@ try:
     import metrics
     from logger import log_debug, log_info, log_warn
     from model import Model, ModelEvents
-    from providers.cartesia.tts import CartesiaTTS
-    from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
-    from providers.gemini.llm import Gemini
-    from providers.inception.inception import InceptionProvider
-    from providers.openai.llm import OpenAI
-    from providers.sam3.sam3 import SamProvider
-    from providers.simli.visual import Simli
-    from providers.text_sentiment.text_sentiment import TextSentimentProvider
-    from providers.yolo.yolo import YoloProvider
-    from providers.local_llm.local_llm import LocalLLM
-    from providers.ocr.ocr import OCRProvider
-    from providers.insivision.visual import Insivision
-    from providers.mujoco.visual import MujocoModel
+    from providers.cartesia import CartesiaProvider
+    from providers.face_landmarker import FaceLandmarkerProvider
+    from providers.gemini import GeminiProvider
+    from providers.gemini_robotics import GeminiRoboticsProvider
+    from providers.inception import InceptionProvider
+    from providers.openai import OpenAIProvider
+    from providers.sam3 import SamProvider
+    from providers.simli import SimliProvider
+    from providers.text_sentiment import TextSentimentProvider
+    from providers.yolo import YoloProvider
+    from providers.local_llm import LocalLLMProvider
+    from providers.ocr import OCRProvider
+    from providers.insivision import InsivisionProvider
+    from providers.mujoco import MujocoProvider
 finally:
     if suppress_objc_warnings:
         try:
@@ -86,22 +87,32 @@ finally:
 
 
 MODEL_MAP = {
-    "gemini": Gemini,
-    "openai": OpenAI,
+    "gemini": GeminiProvider,
+    "openai": OpenAIProvider,
     "yolo": YoloProvider,
     "sam": SamProvider,
     "sam3": SamProvider,
     "sam2": SamProvider,
-    "simli": Simli,
+    "simli": SimliProvider,
     "face_landmarker": FaceLandmarkerProvider,
     "text_sentiment": TextSentimentProvider,
     "inception": InceptionProvider,
-    "cartesia": CartesiaTTS,
-    "local_llm": LocalLLM,
+    "cartesia": CartesiaProvider,
+    "local_llm": LocalLLMProvider,
     "ocr": OCRProvider,
-    "insivision": Insivision,
-    "mujoco": MujocoModel,
+    "insivision": InsivisionProvider,
+    "mujoco": MujocoProvider,
+    "gemini-robotics": GeminiRoboticsProvider,
 }
+
+
+def resolve_model_class(model_name: str):
+    """Resolve a model name to its provider class using the longest matching
+    MODEL_MAP prefix (so 'gemini-robotics' wins over 'gemini')."""
+    matches = [prefix for prefix in MODEL_MAP if model_name.startswith(prefix)]
+    if not matches:
+        return None
+    return MODEL_MAP[max(matches, key=len)]
 
 
 def parse_model(model_str: str):
@@ -426,11 +437,7 @@ class Connection:
 
     def get_model(self, name: str):
         model_name, _ = parse_model(name)
-        model_class = None
-        for prefix, cls in MODEL_MAP.items():
-            if model_name.startswith(prefix):
-                model_class = cls
-                break
+        model_class = resolve_model_class(model_name)
         if not model_class:
             return None
         for m in self.models:
@@ -477,7 +484,7 @@ class Connection:
         message = json.dumps({"type": "transcription", "role": "model", "content": text})
         self._broadcast_to_channels(message)
         for m in self.models:
-            if isinstance(m, (Gemini, OpenAI)):
+            if isinstance(m, (GeminiProvider, OpenAIProvider)):
                 m._emit("response", {"text": text})
 
     def _on_detection_event(self, provider_name: str, items):
@@ -559,11 +566,7 @@ class Connection:
         model_name, params = parse_model(name)
         if kwargs:
             params.update(kwargs)
-        model_class = None
-        for prefix, cls in MODEL_MAP.items():
-            if model_name.startswith(prefix):
-                model_class = cls
-                break
+        model_class = resolve_model_class(model_name)
 
         if not model_class:
             self.info(f"Model map not found for {name}")
@@ -623,7 +626,7 @@ class Connection:
             async def on_message(message):
                 self.last_message_time = time.time()
                 for m in self.models:
-                    if not isinstance(m, Simli):
+                    if not isinstance(m, SimliProvider):
                         await m.send(message)
 
         @self.pc.on("connectionstatechange")

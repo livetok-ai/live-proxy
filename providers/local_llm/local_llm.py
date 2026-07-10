@@ -8,7 +8,7 @@ from logger import log_info
 from model import Input, Model, ModelEvents, Output
 
 
-class LocalLLM(Model):
+class LocalLLMProvider(Model):
     @property
     def is_llm(self) -> bool:
         return True
@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     async def main():
         log_info("Starting LocalLLM standalone test...")
-        provider = LocalLLM()
+        provider = LocalLLMProvider()
 
         response_received = False
 

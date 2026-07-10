@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
+from providers.face_landmarker import FaceLandmarkerProvider
 
 
 @pytest.mark.asyncio

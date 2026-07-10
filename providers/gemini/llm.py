@@ -11,7 +11,7 @@ from PIL.Image import Image
 # from logger import log_info
 from logger import log_info
 from model import Input, Model, ModelEvents, Output
-from providers.cartesia.tts import CartesiaTTS
+from providers.cartesia import CartesiaProvider
 from utils import parse_bool, parse_int
 
 SAMPLE_RATE = 16000
@@ -19,7 +19,7 @@ AUDIO_PTIME = 0.02
 USE_VERTEX_AI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
 
 
-class Gemini(Model):
+class GeminiProvider(Model):
     @property
     def is_llm(self) -> bool:
         return True
@@ -102,7 +102,7 @@ class Gemini(Model):
         if self.model and self.model.endswith("/cartesia"):
             gemini_model = self.model.replace("/cartesia", "")
             if not self.tts and os.getenv("CARTESIA_API_KEY"):
-                self.tts = CartesiaTTS()
+                self.tts = CartesiaProvider()
 
         if USE_VERTEX_AI:
             scopes = [
@@ -508,7 +508,7 @@ class Gemini(Model):
 @contextlib.asynccontextmanager
 async def connect_gemini(
     model: str, system_instructions=None, tools=None, tool_callback=None, voice=None, language=None, api_key=None
-) -> AsyncGenerator[Gemini, None]:
+) -> AsyncGenerator[GeminiProvider, None]:
     class DummyConnection:
         def __init__(self):
             self.system_instructions = system_instructions
@@ -518,7 +518,7 @@ async def connect_gemini(
             self.language = language
             self.api_key = api_key
 
-    gemini = Gemini(name=model, connection=DummyConnection())
+    gemini = GeminiProvider(name=model, connection=DummyConnection())
     await gemini.connect()
     try:
         yield gemini

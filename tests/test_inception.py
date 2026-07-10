@@ -3,7 +3,7 @@ import pytest
 import torch
 from PIL import Image
 
-from providers.inception.inception import InceptionProvider
+from providers.inception import InceptionProvider
 
 
 @pytest.mark.asyncio

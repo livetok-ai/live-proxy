@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from providers.text_sentiment.text_sentiment import TextSentimentProvider
+from providers.text_sentiment import TextSentimentProvider
 
 
 @pytest.mark.asyncio

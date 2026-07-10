@@ -20,7 +20,7 @@ SAMPLE_RATE = 16000
 AUDIO_PTIME = 0.02
 
 
-class Simli(Model):
+class SimliProvider(Model):
     @property
     def supports_audio(self) -> bool:
         return True
@@ -175,8 +175,8 @@ class Simli(Model):
 
 
 @contextlib.asynccontextmanager
-async def connect_simli(api_key: str = None, face_id: str = None) -> AsyncGenerator[Simli, None]:
-    simli = Simli(name="simli", connection=None, api_key=api_key, face_id=face_id)
+async def connect_simli(api_key: str = None, face_id: str = None) -> AsyncGenerator[SimliProvider, None]:
+    simli = SimliProvider(name="simli", connection=None, api_key=api_key, face_id=face_id)
     await simli.connect()
     try:
         yield simli
@@ -196,7 +196,7 @@ async def main():
 
     running = True
 
-    async def send_audio_task(simli: Simli):
+    async def send_audio_task(simli: SimliProvider):
         """Send 20ms chunks of random audio until stopped."""
         samples_per_chunk = int(SAMPLE_RATE * AUDIO_PTIME)  # 320 samples for 20ms at 16kHz
         chunk_count = 0
@@ -213,7 +213,7 @@ async def main():
 
         print(f"Audio sender stopped after {chunk_count} chunks")
 
-    async def recv_video_task(simli: Simli):
+    async def recv_video_task(simli: SimliProvider):
         """Receive and print video frame resolutions."""
         nonlocal running
         frame_count = 0

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from providers.ocr.ocr import OCRProvider
+from providers.ocr import OCRProvider
 
 
 @pytest.mark.asyncio
@@ -72,6 +72,7 @@ async def test_ocr_provider_send_frame_and_events():
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
 
     await provider.send(img)
+    await asyncio.sleep(0.05)  # inference runs in the background
 
     # Validate that we emitted events with correctly sorted results
     # EasyOCR results should be sorted top-to-bottom: "Hello" (y=10) should come before "World" (y=30)
@@ -154,12 +155,14 @@ async def test_ocr_provider_sampling():
     await provider.send(img)  # Frame 1: Processes
     await provider.send(img)  # Frame 2: Skips
     await provider.send(img)  # Frame 3: Skips
+    await asyncio.sleep(0.05)  # inference runs in the background
 
     assert call_count == 1
     assert provider.frame_count == 3
 
     # Send 4th frame
     await provider.send(img)  # Frame 4: Processes (4 % 3 = 1)
+    await asyncio.sleep(0.05)
     assert call_count == 2
     assert provider.frame_count == 4
 

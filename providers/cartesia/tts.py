@@ -20,7 +20,7 @@ AUDIO_PTIME = 0.02  # 20ms frames
 BYTES_PER_SAMPLE = 4  # 32-bit float = 4 bytes
 
 
-class CartesiaTTS(Model):
+class CartesiaProvider(Model):
     """
     Cartesia TTS model implementation using WebSocket streaming API.
 
@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
     async def main():
         print("Starting Cartesia TTS test with audio playback...", flush=True)
-        cartesia = CartesiaTTS()
+        cartesia = CartesiaProvider()
         print("Connecting...", flush=True)
         await cartesia.connect()
         print("Connected! Sending text...", flush=True)

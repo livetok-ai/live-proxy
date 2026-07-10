@@ -4,13 +4,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from model import ModelEvents
-from providers.local_llm.local_llm import LocalLLM
+from providers.local_llm import LocalLLMProvider
 
 
 @pytest.mark.asyncio
 async def test_local_llm_provider_init():
     """Test LocalLLM provider capability properties and initialization defaults."""
-    provider = LocalLLM(name="local_llm")
+    provider = LocalLLMProvider(name="local_llm")
 
     assert provider.supports_audio is False
     assert provider.supports_text is True
@@ -24,7 +24,7 @@ async def test_local_llm_provider_init():
 @pytest.mark.asyncio
 async def test_local_llm_provider_connect():
     """Test LocalLLM provider connect loads tokenizer and model."""
-    provider = LocalLLM(name="local_llm")
+    provider = LocalLLMProvider(name="local_llm")
 
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()
@@ -46,7 +46,7 @@ async def test_local_llm_provider_connect():
 @pytest.mark.asyncio
 async def test_local_llm_provider_generation():
     """Test LocalLLM generation logic, history tracking, and token emission."""
-    provider = LocalLLM(name="local_llm")
+    provider = LocalLLMProvider(name="local_llm")
 
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()

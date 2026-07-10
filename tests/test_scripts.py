@@ -5,9 +5,9 @@ import pytest
 
 import script_manager
 from connection import Connection
-from providers.face_landmarker.face_landmarker import FaceLandmarkerProvider
-from providers.inception.inception import InceptionProvider
-from providers.yolo.yolo import YoloProvider
+from providers.face_landmarker import FaceLandmarkerProvider
+from providers.inception import InceptionProvider
+from providers.yolo import YoloProvider
 
 
 class DummyInceptionModel(InceptionProvider):
@@ -391,12 +391,12 @@ async def test_js_add_tool_and_fetch(tmp_path):
     """Test that llm.addTool() and fetch() can be called from JavaScript script, and the tool callback executes."""
     from unittest.mock import AsyncMock, MagicMock
 
-    from providers.gemini.llm import Gemini
+    from providers.gemini import GeminiProvider
 
     conn = Connection()
 
     # Initialize a real Gemini instance or mock
-    gemini_model = Gemini()
+    gemini_model = GeminiProvider()
     gemini_model.connect = AsyncMock()
     gemini_model.close = AsyncMock()
     gemini_model.session = MagicMock()
@@ -490,10 +490,10 @@ async def test_js_async_add_tool(tmp_path):
     """Test that an async JavaScript tool callback can be registered and resolved properly via Promise queue."""
     from unittest.mock import AsyncMock, MagicMock
 
-    from providers.gemini.llm import Gemini
+    from providers.gemini import GeminiProvider
 
     conn = Connection()
-    gemini_model = Gemini()
+    gemini_model = GeminiProvider()
     gemini_model.connect = AsyncMock()
     gemini_model.close = AsyncMock()
     gemini_model.session = MagicMock()
