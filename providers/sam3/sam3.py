@@ -120,14 +120,14 @@ class SamProvider(VisionModel):
                             }
                         )
 
-        current_labels = [m["label"] for m in detected_masks]
-        last_labels = [m["label"] for m in self.last_masks]
         self.last_masks = detected_masks
 
-        if current_labels != last_labels:
-            log_info(f"SAM3 objects changed: {current_labels}")
-            self._emit("segmentations_changed", current_labels)
-            self._emit("objects", current_labels)
+        raw = [
+            {"label": m["label"], "coords": m["coords"], "area": m["area"], "center": m["center"]}
+            for m in detected_masks
+        ]
+        current_labels = {m["label"] for m in detected_masks}
+        self.notify_detections(raw, current_labels)
 
     async def close(self):
         log_info("Closing SAM provider")

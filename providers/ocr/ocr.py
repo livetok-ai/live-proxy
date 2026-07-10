@@ -22,6 +22,7 @@ class OCRProvider(VisionModel):
     _shared_languages = None
 
     DEFAULT_SAMPLING_RATE = 5
+    DETECTION_EVENT = "texts_detected"
 
     @classmethod
     async def setup(cls, languages: List[str] = None):
@@ -55,7 +56,6 @@ class OCRProvider(VisionModel):
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.reader = None
-        self.last_detections = set()
         self.last_drawn_boxes = []
 
         # Parse languages list (e.g. languages="en+es" or "en,fr")
@@ -87,7 +87,6 @@ class OCRProvider(VisionModel):
 
     def clear_overlay(self):
         self.last_drawn_boxes = []
-        self.last_detections = set()
 
     def draw_overlay(self, image: Image) -> Image:
         if not self.last_drawn_boxes:
@@ -141,16 +140,8 @@ class OCRProvider(VisionModel):
 
         self.last_drawn_boxes = drawn_boxes
 
-        # Check if the unique set of detected texts changed
-        detected_set = set(detected_texts)
-        if detected_set != self.last_detections:
-            sorted_unique_texts = sorted(detected_set)
-            log_info(f"OCR texts changed: {sorted_unique_texts}")
-            self.last_detections = detected_set
-
-            self._emit("texts_changed", sorted_unique_texts)
-            self._emit("texts", sorted_unique_texts)
-            self._emit("ocr_text", detected_texts)
+        raw = [{"text": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in drawn_boxes]
+        self.notify_detections(raw, set(detected_texts))
 
     async def close(self):
         log_info("Closing OCR provider")

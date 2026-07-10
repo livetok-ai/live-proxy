@@ -63,6 +63,6 @@ function setup(connection) {
         connection.send_data({ display: sentiment.toUpperCase() });
     };
 
-    yolo.on("objects", objects_handler);
-    landmark.on("sentiment", sentiment_handler);
+    yolo.on("objects_detected", objects_handler);
+    landmark.on("emotions_detected", sentiment_handler);
 }

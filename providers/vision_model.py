@@ -148,6 +148,7 @@ class VisionModel(Model):
         elif not self.input_enabled:
             self._pending_frame = None
             self.clear_overlay()
+            self.reset_detections()
 
         # Always forward the frame, whether or not it was picked for inference.
         if self.output_enabled:

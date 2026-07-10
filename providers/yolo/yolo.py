@@ -43,7 +43,6 @@ class YoloProvider(VisionModel):
         super().__init__(name=name, connection=connection, **kwargs)
         self.model_name = kwargs.get("model") or name
         self.model = None
-        self.last_detections = set()
         self.last_drawn_boxes = []
         log_info(
             f"YOLO provider model: {self.model_name} draw_detections: {self.draw_detections} "
@@ -62,7 +61,6 @@ class YoloProvider(VisionModel):
 
     def clear_overlay(self):
         self.last_drawn_boxes = []
-        self.last_detections = set()
 
     def draw_overlay(self, image: Image) -> Image:
         drawn_image = image.copy()
@@ -99,12 +97,8 @@ class YoloProvider(VisionModel):
 
         self.last_drawn_boxes = drawn_boxes
 
-        if detected != self.last_detections:
-            sorted_detections = sorted(detected)
-            log_info(f"YOLO detections changed: {sorted_detections}")
-            self.last_detections = detected
-            self._emit("detections_changed", sorted_detections)
-            self._emit("objects", sorted_detections)
+        raw = [{"label": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in drawn_boxes]
+        self.notify_detections(raw, detected)
 
     async def close(self):
         log_info("Closing YOLO provider")

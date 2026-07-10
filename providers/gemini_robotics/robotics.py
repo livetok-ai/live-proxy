@@ -36,7 +36,6 @@ class GeminiRoboticsProvider(VisionModel):
         )
 
         self.client = None
-        self.last_detections = set()
         self.last_drawn_boxes = []
 
         log_info(
@@ -53,7 +52,6 @@ class GeminiRoboticsProvider(VisionModel):
 
     def clear_overlay(self):
         self.last_drawn_boxes = []
-        self.last_detections = set()
 
     def draw_overlay(self, image: Image) -> Image:
         drawn_image = image.copy()
@@ -91,14 +89,7 @@ class GeminiRoboticsProvider(VisionModel):
 
         self.last_drawn_boxes = drawn_boxes
 
-        if labels != self.last_detections:
-            sorted_detections = sorted(labels)
-            log_info(f"Gemini Robotics detections changed: {sorted_detections}")
-            self.last_detections = labels
-            self._emit("detections_changed", sorted_detections)
-            self._emit("objects", sorted_detections)
-
-        self._emit("detections", detections)
+        self.notify_detections(detections, labels)
 
     def _parse_detections(self, text: str, width: int, height: int):
         cleaned = text.strip()

@@ -215,8 +215,8 @@ async def test_counter_script_logic():
     await counter_script.setup(conn)
 
     # Check that handlers were registered
-    assert "objects" in yolo._handlers
-    assert "sentiment" in landmark._handlers
+    assert "objects_detected" in yolo._handlers
+    assert "emotions_detected" in landmark._handlers
 
     # Check initial default state set by setup: YOLO active, Landmark inactive
     assert yolo.input_enabled is True
@@ -225,23 +225,23 @@ async def test_counter_script_logic():
     assert landmark.output_enabled is False
 
     # 1. Trigger objects detected (no person)
-    yolo.trigger("objects", ["car", "dog"])
+    yolo.trigger("objects_detected", ["car", "dog"])
     assert yolo.output_enabled is True
     assert landmark.input_enabled is False
     assert landmark.output_enabled is False
     assert conn.object_counts == {"car": 1, "dog": 1}
 
     # 2. Trigger objects detected (with person)
-    yolo.trigger("objects", ["person", "chair"])
+    yolo.trigger("objects_detected", ["person", "chair"])
     assert yolo.output_enabled is False
     assert landmark.input_enabled is True
     assert landmark.output_enabled is True
     assert conn.object_counts == {"car": 1, "dog": 1, "person": 1, "chair": 1}
 
     # 3. Trigger sentiment detected
-    landmark.trigger("sentiment", "happy")
-    landmark.trigger("sentiment", "happy")
-    landmark.trigger("sentiment", "neutral")
+    landmark.trigger("emotions_detected", "happy")
+    landmark.trigger("emotions_detected", "happy")
+    landmark.trigger("emotions_detected", "neutral")
     assert conn.sentiment_counts == {"happy": 2, "neutral": 1}
 
     # 4. Run teardown
@@ -254,8 +254,8 @@ async def test_counter_script_logic():
         assert any("Final sentiment counts:" in msg for msg in log_messages)
 
     # Check event handlers were cleaned up
-    assert "objects" not in yolo._handlers
-    assert "sentiment" not in landmark._handlers
+    assert "objects_detected" not in yolo._handlers
+    assert "emotions_detected" not in landmark._handlers
 
 
 @pytest.mark.asyncio
@@ -278,8 +278,8 @@ async def test_js_counter_script_logic():
     counter_script.contexts[conn.id][0].eval("connection.start_time = 0;")
 
     # Check that handlers were registered
-    assert "objects" in yolo._handlers
-    assert "sentiment" in landmark._handlers
+    assert "objects_detected" in yolo._handlers
+    assert "emotions_detected" in landmark._handlers
 
     # Check initial default state set by setup: YOLO active, Landmark inactive
     assert yolo.input_enabled is True
@@ -288,21 +288,21 @@ async def test_js_counter_script_logic():
     assert landmark.output_enabled is False
 
     # 1. Trigger objects detected (no person)
-    yolo.trigger("objects", ["car", "dog"])
+    yolo.trigger("objects_detected", ["car", "dog"])
     assert yolo.output_enabled is True
     assert landmark.input_enabled is False
     assert landmark.output_enabled is False
 
     # 2. Trigger objects detected (with person)
-    yolo.trigger("objects", ["person", "chair"])
+    yolo.trigger("objects_detected", ["person", "chair"])
     assert yolo.output_enabled is False
     assert landmark.input_enabled is True
     assert landmark.output_enabled is True
 
     # 3. Trigger sentiment detected
-    landmark.trigger("sentiment", "happy")
-    landmark.trigger("sentiment", "happy")
-    landmark.trigger("sentiment", "neutral")
+    landmark.trigger("emotions_detected", "happy")
+    landmark.trigger("emotions_detected", "happy")
+    landmark.trigger("emotions_detected", "neutral")
 
     # No teardown check since it was removed from counter.js
 

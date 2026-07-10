@@ -15,6 +15,8 @@ class InceptionProvider(Model):
     _shared_resnet = None
     _shared_device = None
 
+    DETECTION_EVENT = "faces_detected"
+
     @property
     def supports_video(self) -> bool:
         return True
@@ -86,7 +88,11 @@ class InceptionProvider(Model):
             if embedding is not None:
                 embedding_list = embedding.tolist()
                 log_info(f"Inception extracted face embedding successfully (size: {len(embedding_list)})")
-                self._emit("faces", {"embedding": embedding_list})
+                self.notify_detections({"embedding": embedding_list}, {"face"})
+            else:
+                self.notify_detections({"embedding": None}, set())
+        elif not self.input_enabled:
+            self.reset_detections()
 
     def _process_frame(self, image: Image.Image):
         import torch

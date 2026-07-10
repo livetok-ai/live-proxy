@@ -64,9 +64,8 @@ async def test_ocr_provider_send_frame_and_events():
 
         return handler
 
-    provider.on("texts_changed", on_event("texts_changed"))
-    provider.on("texts", on_event("texts"))
-    provider.on("ocr_text", on_event("ocr_text"))
+    provider.on("texts_detected", on_event("texts_detected"))
+    provider.on("inference", on_event("inference"))
 
     # Create dummy black image
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -76,12 +75,12 @@ async def test_ocr_provider_send_frame_and_events():
 
     # Validate that we emitted events with correctly sorted results
     # EasyOCR results should be sorted top-to-bottom: "Hello" (y=10) should come before "World" (y=30)
-    assert "texts" in emitted_events
-    assert emitted_events["texts"] == ["Hello", "World"]  # unique sorted set
+    assert "texts_detected" in emitted_events
+    assert emitted_events["texts_detected"] == ["Hello", "World"]  # unique sorted set
 
-    assert "ocr_text" in emitted_events
-    # list in layout order: top-to-bottom
-    assert emitted_events["ocr_text"] == ["Hello", "World"]
+    assert "inference" in emitted_events
+    # raw per-detection content, in layout order: top-to-bottom
+    assert [item["text"] for item in emitted_events["inference"]] == ["Hello", "World"]
 
     await provider.close()
 

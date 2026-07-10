@@ -61,6 +61,21 @@ function addOrAppendMessage(messageType, content) {
   dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
 }
 
+// Show the latest per-frame inference result, replacing whatever was shown before.
+function updateInferenceStatus(provider, content) {
+  const el = document.getElementById('inference-status');
+  if (!el) return;
+
+  let formatted;
+  try {
+    formatted = JSON.stringify(content, null, 2);
+  } catch (e) {
+    formatted = String(content);
+  }
+
+  el.textContent = `[${provider}] ${formatted}`;
+}
+
 function createPeerConnection() {
   var config = {
   };
@@ -280,6 +295,10 @@ async function start() {
         const content = data.content;
 
         addOrAppendMessage(currentMessageType, content);
+      } else if (data.type === 'inference') {
+        // Latest raw inference result for a processed frame — replaces
+        // whatever was previously shown, it is not appended.
+        updateInferenceStatus(data.provider, data.content);
       } else {
         // Handle other JSON message types if needed - ignore for now
       }

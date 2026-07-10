@@ -37,24 +37,25 @@ async def test_inception_provider_send_frame_no_face():
     # Create a 160x160 dummy black image (contains no face)
     img = Image.fromarray(np.zeros((160, 160, 3), dtype=np.uint8))
 
-    # We track if faces event is fired (it shouldn't be since there's no face)
-    emitted = []
-
-    def on_faces(data):
-        emitted.append(data)
-
-    provider.on("faces", on_faces)
+    inference_events = []
+    detected_events = []
+    provider.on("inference", lambda data: inference_events.append(data))
+    provider.on("faces_detected", lambda data: detected_events.append(data))
 
     # Process frame
     await provider.send(img)
 
-    assert len(emitted) == 0
+    # "inference" always fires with the raw (empty) result...
+    assert inference_events == [{"embedding": None}]
+    # ...and "faces_detected" fires once with no labels (first observed state).
+    assert detected_events == [[]]
+
     await provider.close()
 
 
 @pytest.mark.asyncio
 async def test_inception_provider_send_frame_with_face_mocked():
-    """Test InceptionProvider emits face_embeddings event when face is detected (mocked)."""
+    """Test InceptionProvider emits inference/faces_detected events when face is detected (mocked)."""
     provider = InceptionProvider(name="inception")
     await provider.connect()
 
@@ -67,23 +68,23 @@ async def test_inception_provider_send_frame_with_face_mocked():
 
     img = Image.fromarray(np.zeros((160, 160, 3), dtype=np.uint8))
 
-    # Track emitted events
-    emitted = []
-
-    def on_faces(data):
-        emitted.append(data)
-
-    provider.on("faces", on_faces)
+    inference_events = []
+    detected_events = []
+    provider.on("inference", lambda data: inference_events.append(data))
+    provider.on("faces_detected", lambda data: detected_events.append(data))
 
     # Process frame
     await provider.send(img)
 
-    assert len(emitted) == 1
-    assert "embedding" in emitted[0]
-    embedding_list = emitted[0]["embedding"]
+    assert len(inference_events) == 1
+    assert "embedding" in inference_events[0]
+    embedding_list = inference_events[0]["embedding"]
     assert len(embedding_list) == 512
     # Verify values are correct (mocked as ones)
     assert all(val == 1.0 for val in embedding_list)
+
+    # A face is present, so "faces_detected" fires with a non-empty label set.
+    assert detected_events == [["face"]]
 
     await provider.close()
 

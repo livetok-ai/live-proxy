@@ -1,3 +1,4 @@
+import asyncio
 import fractions
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +14,7 @@ async def test_face_landmarker_provider_init():
     """Test FaceLandmarkerProvider initialization and default attributes."""
     provider = FaceLandmarkerProvider()
     assert provider.detector is None
-    assert provider.last_emotion is None
+    assert provider.last_drawn_boxes == []
 
 
 @pytest.mark.asyncio
@@ -40,15 +41,20 @@ async def test_face_landmarker_provider_send_frame():
     # Setup mock detector
     provider.detector = MagicMock()
 
-    # Mock _process_frame to return a mock result
-    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
-        mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
+    # Mock _detect_emotion to return a mock result
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._detect_emotion") as mock_detect:
+        mock_detect.return_value = ("happy", 0.95, [10, 10, 90, 90])
+
+        emitted = []
+        provider.on("emotions_detected", lambda data: emitted.append(data))
 
         # Create a 100x100 dummy black image
         img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
 
         await provider.send(img)
-        assert provider.last_emotion == "happy"
+        await asyncio.sleep(0.05)  # inference runs in the background
+
+        assert emitted == ["happy"]
 
     await provider.close()
 
@@ -93,8 +99,8 @@ async def test_face_landmarker_provider_draw_detections():
     img.pts = 12345
     img.time_base = fractions.Fraction(1, 30)
 
-    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
-        mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._detect_emotion") as mock_detect:
+        mock_detect.return_value = ("happy", 0.95, [10, 10, 90, 90])
         await provider.send(img)
 
     # Receive the frame and check it is returned
@@ -124,28 +130,32 @@ async def test_face_landmarker_provider_sampling():
         assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 
-    # Mock the actual _process_frame to count calls
+    # Mock the actual _detect_emotion to count calls
     call_count = 0
 
-    def dummy_process(input_img, *args, **kwargs):
+    def dummy_detect(input_img, *args, **kwargs):
         nonlocal call_count
         call_count += 1
         return ("neutral", 0.8, [10, 10, 90, 90])
 
-    provider._process_frame = dummy_process
+    provider._detect_emotion = dummy_detect
 
     # Send 5 dummy frames
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
     for _ in range(5):
         await provider.send(img)
 
-    # Process frame should only be called once (the first frame)
+    # Inference now runs in the background; give the scheduled task a chance to finish.
+    await asyncio.sleep(0.05)
+
+    # _detect_emotion should only be called once (the first frame)
     assert call_count == 1
     assert provider.frame_count == 5
 
     # Send 6th frame
     await provider.send(img)
-    # Process frame should be called again (the 6th frame)
+    await asyncio.sleep(0.05)
+    # _detect_emotion should be called again (the 6th frame)
     assert call_count == 2
     assert provider.frame_count == 6
 
@@ -163,9 +173,9 @@ async def test_face_landmarker_provider_queue_limit():
     # Enable output to queue frames
     provider.output_enabled = True
 
-    # Send 12 dummy frames with a mocked _process_frame to avoid mediapipe dependency
-    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._process_frame") as mock_process:
-        mock_process.return_value = ("happy", 0.95, [10, 10, 90, 90])
+    # Send 12 dummy frames with a mocked _detect_emotion to avoid mediapipe dependency
+    with patch("providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._detect_emotion") as mock_detect:
+        mock_detect.return_value = ("happy", 0.95, [10, 10, 90, 90])
         img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
         for i in range(12):
             img.pts = i

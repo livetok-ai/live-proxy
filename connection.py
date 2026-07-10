@@ -295,13 +295,14 @@ class Connection:
             m.on(ModelEvents.INPUT_TRANSCRIPTION, self._on_input_transcription)
             m.on(ModelEvents.OUTPUT_TRANSCRIPTION, self._on_output_transcription)
             m.on(ModelEvents.INTERRUPTED, self._on_interrupted)
-            # detection/classification providers (YOLO "objects", OCR "texts",
-            # face-landmarker "sentiment", ...) — harmless no-op for models
+            # every processed frame from a vision provider emits "inference"
+            # (raw result) and, when the detected labels changed, one of the
+            # provider-specific *_detected events — harmless no-op for models
             # that never emit these
             provider_name, _ = parse_model(m.name or "")
-            m.on("objects", lambda items, _p=provider_name: self._on_detection_event(_p, items))
-            m.on("texts", lambda items, _p=provider_name: self._on_detection_event(_p, items))
-            m.on("sentiment", lambda item, _p=provider_name: self._on_detection_event(_p, item))
+            m.on(ModelEvents.INFERENCE, lambda content, _p=provider_name: self._on_inference_event(_p, content))
+            for detection_event in ("objects_detected", "texts_detected", "emotions_detected", "faces_detected"):
+                m.on(detection_event, lambda items, _p=provider_name: self._on_detection_event(_p, items))
 
         self._connecting = True
 
@@ -488,14 +489,23 @@ class Connection:
                 m._emit("response", {"text": text})
 
     def _on_detection_event(self, provider_name: str, items):
-        """Forward provider detection/classification results (YOLO objects,
-        OCR texts, face-landmarker sentiment, ...) to connected clients over
-        the data channel so the UI can log them as timeline events."""
+        """Forward provider detection/classification results (YOLO
+        objects_detected, OCR texts_detected, face-landmarker
+        emotions_detected, inception faces_detected, ...) to connected
+        clients over the data channel so the UI can log them as timeline
+        events."""
         if items is None:
             items = []
         elif not isinstance(items, (list, tuple, set)):
             items = [items]
         message = json.dumps({"type": "detections", "provider": provider_name, "items": list(items)})
+        self._broadcast_to_channels(message)
+
+    def _on_inference_event(self, provider_name: str, content):
+        """Forward the raw inference result of every processed frame to
+        connected clients over the data channel so the UI can show the
+        latest status, replacing whatever was shown before."""
+        message = json.dumps({"type": "inference", "provider": provider_name, "content": content})
         self._broadcast_to_channels(message)
 
     MAX_DATA_CHANNELS = 10

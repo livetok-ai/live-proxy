@@ -54,8 +54,8 @@ async def setup(connection):
             )
             connection.send_data({"display": sentiment.upper()})
 
-        yolo.on("objects", objects_detected)
-        landmark.on("sentiment", sentiment_detected)
+        yolo.on("objects_detected", objects_detected)
+        landmark.on("emotions_detected", sentiment_detected)
 
         # Save handlers for clean unregistration on teardown
         connection._objects_handler = objects_detected
@@ -78,6 +78,6 @@ def teardown(connection):
     yolo = connection.get_model("yolo")
     landmark = connection.get_model("face_landmarker")
     if yolo and hasattr(connection, "_objects_handler"):
-        yolo.off("objects", connection._objects_handler)
+        yolo.off("objects_detected", connection._objects_handler)
     if landmark and hasattr(connection, "_sentiment_handler"):
-        landmark.off("sentiment", connection._sentiment_handler)
+        landmark.off("emotions_detected", connection._sentiment_handler)

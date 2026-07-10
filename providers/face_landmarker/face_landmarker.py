@@ -1,28 +1,20 @@
 import asyncio
 import os
 import urllib.request
-from typing import AsyncIterator
 
 import numpy as np
-from av import VideoFrame
 from PIL import ImageDraw
 from PIL.Image import Image
 
 from logger import log_info
-from model import Input, Model, Output
-from utils import limit_queue_size, parse_bool, parse_int
+from providers.vision_model import VisionModel, draw_box_with_label
 
 
-class FaceLandmarkerProvider(Model):
+class FaceLandmarkerProvider(VisionModel):
     _shared_model_path = None
 
-    @property
-    def supports_video(self) -> bool:
-        return True
-
-    @property
-    def video_support(self) -> bool:
-        return True
+    DEFAULT_SAMPLING_RATE = 5
+    DETECTION_EVENT = "emotions_detected"
 
     @classmethod
     async def setup(cls):
@@ -57,24 +49,15 @@ class FaceLandmarkerProvider(Model):
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.detector = None
-        self.last_emotion = None
-        self.model = kwargs.get("model") or name
-
-        # Support draw and sampling parameters only from kwargs
-        self.draw_detections = parse_bool(kwargs.get("draw"), False)
-        self.sampling_rate = parse_int(kwargs.get("sampling"), 5)
-
-        self.frame_count = 0
-        self.last_drawn_boxes = []
-        self.output_queue = asyncio.Queue()
         self.model_path = None
+        self.last_drawn_boxes = []
         log_info(
             f"Face Landmarker provider draw_detections: {self.draw_detections} sampling_rate: {self.sampling_rate}"
         )
 
     @property
-    def overlay_enabled(self) -> bool:
-        return self.draw_detections
+    def is_ready(self) -> bool:
+        return self.detector is not None
 
     def get_color(self, label: str):
         # Premium harmonized color palette based on detected emotion
@@ -111,83 +94,43 @@ class FaceLandmarkerProvider(Model):
         )
         return vision.FaceLandmarker.create_from_options(options)
 
-    async def send(self, input: Input):
-        if not self.detector:
-            return
+    def clear_overlay(self):
+        self.last_drawn_boxes = []
 
-        if not isinstance(input, Image):
-            return
+    def draw_overlay(self, image: Image) -> Image:
+        if not self.last_drawn_boxes:
+            return image
 
-        self.frame_count += 1
-        should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
+        drawn_image = image.copy()
+        draw = ImageDraw.Draw(drawn_image)
 
-        if self.input_enabled and should_process:
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(None, self._process_frame, input)
+        for box in self.last_drawn_boxes:
+            text = f'{box["label"]} {box["conf"]:.2f}'
+            draw_box_with_label(draw, box["coords"], text, box["color"])
 
-            if results:
-                primary_emotion, max_score, coords = results
-                if primary_emotion != self.last_emotion:
-                    log_info(f"Face emotion changed: {primary_emotion} (confidence: {max_score:.2f})")
-                    self.last_emotion = primary_emotion
-                    self._emit("emotion_changed", primary_emotion)
-                    self._emit("sentiment", primary_emotion)
+        return drawn_image
 
-                self.last_drawn_boxes = []
-                if coords:
-                    color = self.get_color(primary_emotion)
-                    self.last_drawn_boxes.append(
-                        {"coords": coords, "label": primary_emotion, "conf": max_score, "color": color}
-                    )
-            else:
-                self.last_drawn_boxes = []
-        elif not self.input_enabled:
+    async def process_frame(self, image: Image):
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, self._detect_emotion, image)
+
+        if not results:
             self.last_drawn_boxes = []
-            self.last_emotion = None
+            return
 
-        # Send/Overlay detections if output is enabled
-        if self.output_enabled:
-            if self.overlay_enabled:
-                drawn_image = input.copy()
-                draw = ImageDraw.Draw(drawn_image)
+        primary_emotion, max_score, coords = results
 
-                for box in self.last_drawn_boxes:
-                    coords = box["coords"]
-                    label = box["label"]
-                    conf = box["conf"]
-                    color = box["color"]
-                    x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
+        self.last_drawn_boxes = []
+        if coords:
+            color = self.get_color(primary_emotion)
+            self.last_drawn_boxes.append(
+                {"coords": coords, "label": primary_emotion, "conf": max_score, "color": color}
+            )
 
-                    # Draw elegant bounding box
-                    draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+        raw = {"emotion": primary_emotion, "confidence": max_score, "coords": coords}
+        self.notify_detections(raw, primary_emotion)
 
-                    # Text label with confidence
-                    text = f"{label} {conf:.2f}"
-
-                    # Draw background box for text label
-                    try:
-                        bbox = draw.textbbox((x1, y1), text)
-                        tw = bbox[2] - bbox[0]
-                        th = bbox[3] - bbox[1]
-                    except AttributeError:
-                        tw, th = draw.textsize(text)
-
-                    text_bg = [x1, max(0, y1 - th - 6), x1 + tw + 6, y1]
-                    draw.rectangle(text_bg, fill=color)
-                    draw.text((x1 + 3, max(0, y1 - th - 4)), text, fill=(255, 255, 255))
-            else:
-                drawn_image = input
-
-            new_frame = VideoFrame.from_image(drawn_image)
-            if hasattr(input, "pts"):
-                new_frame.pts = input.pts
-            if hasattr(input, "time_base"):
-                new_frame.time_base = input.time_base
-
-            limit_queue_size(self.output_queue, 10)
-            self.output_queue.put_nowait(new_frame)
-
-    def _process_frame(self, image: Image):
+    def _detect_emotion(self, image: Image):
         import mediapipe as mp
 
         image_np = np.array(image.convert("RGB"))
@@ -253,14 +196,6 @@ class FaceLandmarkerProvider(Model):
 
             return primary_emotion, max_score, coords
         return None
-
-    async def recv(self) -> AsyncIterator[Output]:
-        while True:
-            try:
-                frame = await self.output_queue.get()
-                yield frame
-            except asyncio.CancelledError:
-                break
 
     async def close(self):
         log_info("Closing Face Landmarker provider")
