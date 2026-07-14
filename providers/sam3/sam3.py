@@ -6,7 +6,7 @@ from PIL.Image import Image
 from ultralytics import SAM
 
 from logger import log_info
-from providers.vision_model import VisionModel, draw_centered_label
+from providers.vision_model import VisionModel
 
 
 class SamProvider(VisionModel):
@@ -60,30 +60,6 @@ class SamProvider(VisionModel):
     def clear_overlay(self):
         self.last_masks = []
 
-    def draw_overlay(self, image: Image) -> Image:
-        drawn_image = image.copy()
-
-        # Create semi-transparent overlay mask layer
-        mask_layer = PILImage.new("RGBA", drawn_image.size, (0, 0, 0, 0))
-        draw_mask = ImageDraw.Draw(mask_layer)
-
-        for mask in self.last_masks:
-            color = mask["color"]
-            label = mask["label"]
-
-            polygon_points = [tuple(p) for p in mask["coords"]]
-            if len(polygon_points) >= 3:
-                # Draw a nice translucent mask fill + outline
-                fill_color = color + (80,)
-                outline_color = color + (200,)
-                draw_mask.polygon(polygon_points, fill=fill_color, outline=outline_color, width=2)
-
-                # Text label centered inside the segmented object
-                draw_centered_label(draw_mask, mask["center"], label, color + (255,), drawn_image.size)
-
-        # Composite the mask overlay with the original frame
-        return PILImage.alpha_composite(drawn_image.convert("RGBA"), mask_layer).convert("RGB")
-
     async def process_frame(self, image: Image):
         # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
         loop = asyncio.get_event_loop()
@@ -128,6 +104,23 @@ class SamProvider(VisionModel):
         ]
         current_labels = {m["label"] for m in detected_masks}
         self.notify_detections(raw, current_labels)
+
+        objects = []
+        for m in detected_masks:
+            xs = [pt[0] for pt in m["coords"]]
+            ys = [pt[1] for pt in m["coords"]]
+            xmin, xmax = min(xs), max(xs)
+            ymin, ymax = min(ys), max(ys)
+            objects.append(
+                {
+                    "label": m["label"],
+                    "left": round(min(1.0, max(0.0, xmin / image.width)), 2),
+                    "top": round(min(1.0, max(0.0, ymin / image.height)), 2),
+                    "right": round(min(1.0, max(0.0, xmax / image.width)), 2),
+                    "bottom": round(min(1.0, max(0.0, ymax / image.height)), 2),
+                }
+            )
+        self.notify_objects(objects)
 
     async def close(self):
         log_info("Closing SAM provider")

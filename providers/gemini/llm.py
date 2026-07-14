@@ -149,6 +149,18 @@ class GeminiProvider(Model):
                 speech_config_dict["voice_config"] = {"prebuilt_voice_config": {"voice_name": voice}}
             speech_config = genai.types.SpeechConfig(**speech_config_dict)
 
+
+        if USE_VERTEX_AI:
+            model = (
+                "gemini-live-2.5-flash-native-audio"
+                if "native" in gemini_model or not gemini_model
+                else gemini_model
+            )
+        else:
+            model = (
+                "gemini-3.1-flash-live-preview" if gemini_model == "gemini" or not gemini_model else gemini_model
+            )
+
         config = genai.types.LiveConnectConfig(
             response_modalities=["TEXT"] if self.tts else ["AUDIO"],
             enable_affective_dialog=True if "native" in model else None,
@@ -164,19 +176,8 @@ class GeminiProvider(Model):
             input_audio_transcription=genai.types.AudioTranscriptionConfig(),
             output_audio_transcription=genai.types.AudioTranscriptionConfig(),
             session_resumption=(genai.types.SessionResumptionConfig(handle=self.previous_session_handle)),
-            thinking_config=genai.types.ThinkingConfig(thinking_level="low"),
+            thinking_config=genai.types.ThinkingConfig(thinking_level="low") if not "native" in model else None,
         )
-
-        if USE_VERTEX_AI:
-            model = (
-                "gemini-live-2.5-flash-native-audio"
-                if "native" in gemini_model or not gemini_model
-                else "gemini-live-2.5-flash-preview"
-            )
-        else:
-            model = (
-                "gemini-live-2.5-flash-native-audio" if gemini_model == "gemini" or not gemini_model else gemini_model
-            )
 
         self.session_context = self.client.aio.live.connect(
             model=model,
@@ -331,13 +332,11 @@ class GeminiProvider(Model):
 
     async def _process_session_events(self, output_queue):
         """Process events from self.session and put outputs in the queue"""
-
         while self.session:
             try:
                 received = self.session.receive()
                 async for event in received:
                     if event.server_content:
-                        # log_info(f"Event ${event}")
                         if event.server_content.model_turn:
                             # log_info(f"Received model turn: {event.server_content.model_turn}")
                             text = event.server_content.model_turn.parts[0].text
@@ -352,7 +351,6 @@ class GeminiProvider(Model):
                                     await self.tts.send(text)
 
                         if event.data:
-                            # log_info(f"Received data: {event.data}")
                             mime_type = event.server_content.model_turn.parts[0].inline_data.mime_type
                             parsed_mime_type = mime_type.split("rate=")
                             sample_rate = int(parsed_mime_type[1]) if len(parsed_mime_type) > 1 else 24000

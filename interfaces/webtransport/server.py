@@ -18,9 +18,9 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
 
 from logger import log_info, log_warn
-from webtransport.certs import certificate_hash_base64, generate_self_signed_cert
-from webtransport.protocol import FRAME_TYPE_CONTROL, FrameDecoder
-from webtransport.session import WebTransportPeerConnection
+from interfaces.webtransport.certs import certificate_hash_base64, generate_self_signed_cert
+from interfaces.webtransport.protocol import FRAME_TYPE_CONTROL, FrameDecoder
+from interfaces.webtransport.session import WebTransportPeerConnection
 
 RAW_QUIC_ALPN = "live-proxy-quic"
 
@@ -171,7 +171,8 @@ class WebTransportServer:
 
     async def start(self):
         """Bind and run until closed. Suitable for asyncio.gather() alongside other servers."""
-        await self.bind()
+        if self._server is None:
+            await self.bind()
         await asyncio.Event().wait()
 
     def close(self):

@@ -25,10 +25,6 @@ class SimliProvider(Model):
     def supports_audio(self) -> bool:
         return True
 
-    @property
-    def video_support(self) -> bool:
-        return True
-
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.api_key = kwargs.get("api_key")

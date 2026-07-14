@@ -7,7 +7,7 @@ from PIL import ImageDraw
 from PIL.Image import Image
 
 from logger import log_info
-from providers.vision_model import VisionModel, draw_box_with_label
+from providers.vision_model import VisionModel
 
 
 class FaceLandmarkerProvider(VisionModel):
@@ -50,7 +50,7 @@ class FaceLandmarkerProvider(VisionModel):
         super().__init__(name=name, connection=connection, **kwargs)
         self.detector = None
         self.model_path = None
-        self.last_drawn_boxes = []
+        self.last_detected_Boxes = []
         log_info(
             f"Face Landmarker provider draw_detections: {self.draw_detections} sampling_rate: {self.sampling_rate}"
         )
@@ -95,40 +95,40 @@ class FaceLandmarkerProvider(VisionModel):
         return vision.FaceLandmarker.create_from_options(options)
 
     def clear_overlay(self):
-        self.last_drawn_boxes = []
-
-    def draw_overlay(self, image: Image) -> Image:
-        if not self.last_drawn_boxes:
-            return image
-
-        drawn_image = image.copy()
-        draw = ImageDraw.Draw(drawn_image)
-
-        for box in self.last_drawn_boxes:
-            text = f'{box["label"]} {box["conf"]:.2f}'
-            draw_box_with_label(draw, box["coords"], text, box["color"])
-
-        return drawn_image
+        self.last_detected_Boxes = []
 
     async def process_frame(self, image: Image):
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(None, self._detect_emotion, image)
 
         if not results:
-            self.last_drawn_boxes = []
+            self.last_detected_Boxes = []
             return
 
         primary_emotion, max_score, coords = results
 
-        self.last_drawn_boxes = []
+        self.last_detected_Boxes = []
         if coords:
             color = self.get_color(primary_emotion)
-            self.last_drawn_boxes.append(
+            self.last_detected_Boxes.append(
                 {"coords": coords, "label": primary_emotion, "conf": max_score, "color": color}
             )
 
         raw = {"emotion": primary_emotion, "confidence": max_score, "coords": coords}
         self.notify_detections(raw, primary_emotion)
+
+        objects = []
+        if coords:
+            objects.append(
+                {
+                    "label": primary_emotion,
+                    "left": round(min(1.0, max(0.0, coords[0] / image.width)), 2),
+                    "top": round(min(1.0, max(0.0, coords[1] / image.height)), 2),
+                    "right": round(min(1.0, max(0.0, coords[2] / image.width)), 2),
+                    "bottom": round(min(1.0, max(0.0, coords[3] / image.height)), 2),
+                }
+            )
+        self.notify_objects(objects)
 
     def _detect_emotion(self, image: Image):
         import mediapipe as mp

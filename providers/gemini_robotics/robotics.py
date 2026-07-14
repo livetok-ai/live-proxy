@@ -8,7 +8,7 @@ from PIL import ImageDraw
 from PIL.Image import Image
 
 from logger import log_info
-from providers.vision_model import VisionModel, draw_box_with_label
+from providers.vision_model import VisionModel
 
 DEFAULT_MODEL = "gemini-robotics-er-1.6-preview"
 DEFAULT_PROMPT = (
@@ -36,7 +36,7 @@ class GeminiRoboticsProvider(VisionModel):
         )
 
         self.client = None
-        self.last_drawn_boxes = []
+        self.last_detected_Boxes = []
 
         log_info(
             f"Gemini Robotics provider model: {self.model} draw_detections: {self.draw_detections} "
@@ -51,16 +51,7 @@ class GeminiRoboticsProvider(VisionModel):
         self.client = genai.Client(api_key=self.api_key)
 
     def clear_overlay(self):
-        self.last_drawn_boxes = []
-
-    def draw_overlay(self, image: Image) -> Image:
-        drawn_image = image.copy()
-        draw = ImageDraw.Draw(drawn_image)
-
-        for box in self.last_drawn_boxes:
-            draw_box_with_label(draw, box["coords"], box["label"], box["color"])
-
-        return drawn_image
+        self.last_detected_Boxes = []
 
     async def process_frame(self, image: Image):
         width, height = image.width, image.height
@@ -75,11 +66,11 @@ class GeminiRoboticsProvider(VisionModel):
 
         detections = self._parse_detections(response.text or "", width, height)
 
-        drawn_boxes = []
+        detected_Boxes = []
         labels = set()
         for detection in detections:
             labels.add(detection["label"])
-            drawn_boxes.append(
+            detected_Boxes.append(
                 {
                     "coords": detection["coords"],
                     "label": detection["label"],
@@ -87,9 +78,23 @@ class GeminiRoboticsProvider(VisionModel):
                 }
             )
 
-        self.last_drawn_boxes = drawn_boxes
+        self.last_detected_Boxes = detected_Boxes
 
         self.notify_detections(detections, labels)
+
+        objects = []
+        for detection in detections:
+            ymin, xmin, ymax, xmax = detection["box_2d"]
+            objects.append(
+                {
+                    "label": detection["label"],
+                    "top": round(min(1.0, max(0.0, ymin / 1000.0)), 2),
+                    "left": round(min(1.0, max(0.0, xmin / 1000.0)), 2),
+                    "bottom": round(min(1.0, max(0.0, ymax / 1000.0)), 2),
+                    "right": round(min(1.0, max(0.0, xmax / 1000.0)), 2),
+                }
+            )
+        self.notify_objects(objects)
 
     def _parse_detections(self, text: str, width: int, height: int):
         cleaned = text.strip()

@@ -25,10 +25,6 @@ class LocalLLMProvider(Model):
     def supports_video(self) -> bool:
         return False
 
-    @property
-    def video_support(self) -> bool:
-        return False
-
     @classmethod
     async def setup(cls, model_id: str = "HuggingFaceTB/SmolLM2-135M-Instruct"):
         """Pre-download the model and tokenizer to cache."""

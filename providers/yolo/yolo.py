@@ -6,7 +6,7 @@ from PIL.Image import Image
 from ultralytics import YOLO
 
 from logger import log_info
-from providers.vision_model import VisionModel, draw_box_with_label
+from providers.vision_model import VisionModel
 
 
 class YoloProvider(VisionModel):
@@ -22,10 +22,8 @@ class YoloProvider(VisionModel):
         # Locate yolo11n.pt model. First check local directory, then check examples folder
         model_path = "yolo11n.pt"
         possible_paths = [
+            os.path.join(os.path.dirname(__file__), model_path),
             model_path,
-            os.path.join(os.path.dirname(__file__), "yolo11n.pt"),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../examples/yolo11n.pt")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../examples/yolo11n.pt")),
         ]
 
         selected_path = model_path
@@ -43,7 +41,7 @@ class YoloProvider(VisionModel):
         super().__init__(name=name, connection=connection, **kwargs)
         self.model_name = kwargs.get("model") or name
         self.model = None
-        self.last_drawn_boxes = []
+        self.last_detected_Boxes = []
         log_info(
             f"YOLO provider model: {self.model_name} draw_detections: {self.draw_detections} "
             f"sampling_rate: {self.sampling_rate}"
@@ -60,17 +58,7 @@ class YoloProvider(VisionModel):
         self.model = YoloProvider._shared_model
 
     def clear_overlay(self):
-        self.last_drawn_boxes = []
-
-    def draw_overlay(self, image: Image) -> Image:
-        drawn_image = image.copy()
-        draw = ImageDraw.Draw(drawn_image)
-
-        for box in self.last_drawn_boxes:
-            text = f'{box["label"]} {box["conf"]:.2f}'
-            draw_box_with_label(draw, box["coords"], text, box["color"])
-
-        return drawn_image
+        self.last_detected_Boxes = []
 
     async def process_frame(self, image: Image):
         # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
@@ -78,7 +66,7 @@ class YoloProvider(VisionModel):
         results = await loop.run_in_executor(None, lambda: self.model(image, verbose=False))
 
         detected = set()
-        drawn_boxes = []
+        detected_Boxes = []
 
         if results and len(results) > 0:
             result = results[0]
@@ -93,12 +81,26 @@ class YoloProvider(VisionModel):
                                 coords = b.xyxy[0].tolist()
                                 conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
                                 color = self.get_color(label)
-                                drawn_boxes.append({"coords": coords, "label": label, "conf": conf, "color": color})
+                                detected_Boxes.append({"coords": coords, "label": label, "conf": conf, "color": color})
 
-        self.last_drawn_boxes = drawn_boxes
+        self.last_detected_Boxes = detected_Boxes
 
-        raw = [{"label": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in drawn_boxes]
+        raw = [{"label": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in detected_Boxes]
         self.notify_detections(raw, detected)
+
+        objects = []
+        for b in detected_Boxes:
+            x1, y1, x2, y2 = b["coords"]
+            objects.append(
+                {
+                    "label": b["label"],
+                    "left": round(min(1.0, max(0.0, x1 / image.width)), 2),
+                    "top": round(min(1.0, max(0.0, y1 / image.height)), 2),
+                    "right": round(min(1.0, max(0.0, x2 / image.width)), 2),
+                    "bottom": round(min(1.0, max(0.0, y2 / image.height)), 2),
+                }
+            )
+        self.notify_objects(objects)
 
     async def close(self):
         log_info("Closing YOLO provider")

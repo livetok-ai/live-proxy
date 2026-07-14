@@ -14,7 +14,7 @@ async def test_face_landmarker_provider_init():
     """Test FaceLandmarkerProvider initialization and default attributes."""
     provider = FaceLandmarkerProvider()
     assert provider.detector is None
-    assert provider.last_drawn_boxes == []
+    assert provider.last_detected_Boxes == []
 
 
 @pytest.mark.asyncio

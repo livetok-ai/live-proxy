@@ -12,7 +12,7 @@ from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import HeadersReceived
 from aioquic.quic.configuration import QuicConfiguration
 
-from webtransport.protocol import (
+from interfaces.webtransport.protocol import (
     FRAME_TYPE_AUDIO,
     FRAME_TYPE_CONTROL,
     FRAME_TYPE_VIDEO,
@@ -21,8 +21,8 @@ from webtransport.protocol import (
     pack_control,
     pack_video,
 )
-from webtransport.server import RAW_QUIC_ALPN, WebTransportServer
-from webtransport.session import WebTransportPeerConnection
+from interfaces.webtransport.server import RAW_QUIC_ALPN, WebTransportServer
+from interfaces.webtransport.session import WebTransportPeerConnection
 
 
 class TestFraming:

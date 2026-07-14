@@ -12,7 +12,9 @@ if TYPE_CHECKING:
 
 import aiohttp
 
+from logger import log_info
 from network import get_public_ip
+from utils import default_connection_params
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +349,10 @@ class SIPServer:
             Tuple of (success, response_data) where response_data contains connection parameters
         """
         if not self.callback_url:
+            defaults = default_connection_params()
+            if defaults:
+                logger.info(f"No callback URL configured, using default connection params: {list(defaults.keys())}")
+                return True, defaults
             logger.warning("No callback URL configured, skipping callback only for testing purposes")
             return True, {}
 
@@ -537,14 +543,19 @@ class SIPServer:
         if session_id and session_id in self.sessions:
             self.sessions[session_id].last_message_at = datetime.now()
 
-    async def start(self):
-        """Start the TCP server."""
+    async def bind(self):
+        """Bind the TCP socket and start accepting connections. Returns once ready."""
         self.server = await asyncio.start_server(self.handle_client, "0.0.0.0", self.port)
 
         addr = self.server.sockets[0].getsockname()
-        logger.info(f"SIP server listening on {addr[0]}:{addr[1]}")
+        log_info(f"SIP server listening on {addr[0]}:{addr[1]} (TCP)")
         if self.callback_url:
             logger.info(f"Callback URL: {self.callback_url}")
+
+    async def start(self):
+        """Bind and run until closed. Suitable for asyncio.gather() alongside other servers."""
+        if self.server is None:
+            await self.bind()
 
         async with self.server:
             await self.server.serve_forever()

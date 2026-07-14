@@ -76,6 +76,124 @@ function updateInferenceStatus(provider, content) {
   el.textContent = `[${provider}] ${formatted}`;
 }
 
+// Deterministic color assignment for labels
+const detectionColors = [
+  'rgb(255, 75, 75)',    // Red
+  'rgb(75, 123, 255)',   // Blue
+  'rgb(75, 255, 123)',   // Green
+  'rgb(180, 75, 255)',   // Purple
+  'rgb(255, 140, 0)',    // Orange
+  'rgb(0, 206, 209)',    // Cyan
+  'rgb(255, 215, 0)',    // Yellow
+  'rgb(255, 105, 180)',  // Pink
+  'rgb(255, 20, 147)',   // Deep Pink
+  'rgb(0, 250, 154)'     // Medium Spring Green
+];
+
+function getColorForLabel(label) {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) {
+    h = (h * 31 + label.charCodeAt(i)) & 0xFFFFFFFF;
+  }
+  return detectionColors[Math.abs(h) % detectionColors.length];
+}
+
+function renderObjects(objects) {
+  const container = document.getElementById('detection-boxes-container');
+  if (!container) return;
+
+  // Clear previous boxes
+  container.innerHTML = '';
+
+  if (!objects || !Array.isArray(objects)) return;
+
+  objects.forEach(obj => {
+    const { label, top, left, bottom, right } = obj;
+    if (top === undefined || left === undefined || bottom === undefined || right === undefined) return;
+
+    // Convert relative coordinates [0, 1] to percentages
+    const pctLeft = (left * 100).toFixed(2) + '%';
+    const pctTop = (top * 100).toFixed(2) + '%';
+    const pctWidth = ((right - left) * 100).toFixed(2) + '%';
+    const pctHeight = ((bottom - top) * 100).toFixed(2) + '%';
+
+    const color = getColorForLabel(label);
+
+    const box = document.createElement('div');
+    box.style.position = 'absolute';
+    box.style.left = pctLeft;
+    box.style.top = pctTop;
+    box.style.width = pctWidth;
+    box.style.height = pctHeight;
+    box.style.border = `3px solid ${color}`;
+    box.style.pointerEvents = 'none';
+
+    // Label tag
+    const labelSpan = document.createElement('span');
+    labelSpan.style.position = 'absolute';
+    labelSpan.style.top = '-22px';
+    labelSpan.style.left = '-3px';
+    labelSpan.style.backgroundColor = color;
+    labelSpan.style.color = 'white';
+    labelSpan.style.fontSize = '12px';
+    labelSpan.style.fontWeight = 'bold';
+    labelSpan.style.padding = '2px 6px';
+    labelSpan.style.whiteSpace = 'nowrap';
+    labelSpan.textContent = label;
+
+    box.appendChild(labelSpan);
+    container.appendChild(box);
+  });
+}
+
+function handleDataChannelMessage(evt) {
+  const message = evt.data;
+
+  try {
+    // Try to parse as JSON
+    const data = JSON.parse(message);
+
+    // Show on top of the video feed any data received that has a "display" attribute
+    if (data && typeof data === 'object' && 'display' in data) {
+      const overlay = document.getElementById('video-overlay');
+      if (overlay) {
+        if (data.display !== null && data.display !== undefined && String(data.display).trim() !== '') {
+          overlay.textContent = data.display;
+          overlay.classList.remove('hidden');
+        } else {
+          overlay.textContent = '';
+          overlay.classList.add('hidden');
+        }
+      }
+    }
+
+    if (data.type === 'transcription') {
+      const currentMessageType = data.role; // 'user' or 'model'
+      const content = data.content;
+
+      addOrAppendMessage(currentMessageType, content);
+    } else if (data.type === 'inference') {
+      // Latest raw inference result for a processed frame — replaces
+      // whatever was previously shown, it is not appended.
+      updateInferenceStatus(data.provider, data.content);
+    } else if (data.type === 'objects') {
+      renderObjects(data.objects);
+    } else {
+      // Handle other JSON message types if needed - ignore for now
+    }
+  } catch (e) {
+    // Fallback for non-JSON messages (backwards compatibility)
+    const currentMessageType = message.startsWith('<') ? 'model' : message.startsWith('>') ? 'user' : null;
+
+    if (currentMessageType) {
+      // Extract the actual message content (without < or > prefix)
+      const content = message.substring(2);
+      addOrAppendMessage(currentMessageType, content);
+    }
+    // Ignore other non-JSON messages
+  }
+}
+
 function createPeerConnection() {
   var config = {
   };
@@ -83,20 +201,23 @@ function createPeerConnection() {
   pc = new RTCPeerConnection(config);
 
   pc.addEventListener('iceconnectionstatechange', () => {
-    iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
+    if (iceConnectionLog) iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
   }, false);
-  iceConnectionLog.textContent = pc.iceConnectionState;
+  if (iceConnectionLog) iceConnectionLog.textContent = pc.iceConnectionState;
 
   // connect audio / video
   pc.addEventListener('track', (evt) => {
-    if (evt.track.kind == 'video' && document.getElementById('recv-video').checked) {
+    const recvVideo = document.getElementById('recv-video');
+    if (evt.track.kind == 'video' && (!recvVideo || recvVideo.checked)) {
       // Reduce jitter buffer to 100 ms for lower latency video playback
       if (evt.receiver && 'jitterBufferTarget' in evt.receiver) {
         evt.receiver.jitterBufferTarget = 0.1;
       }
-      document.getElementById('video').srcObject = evt.streams[0];
+      const videoEl = document.getElementById('video');
+      if (videoEl) videoEl.srcObject = evt.streams[0];
     } else {
-      document.getElementById('audio').srcObject = evt.streams[0];
+      const audioEl = document.getElementById('audio');
+      if (audioEl) audioEl.srcObject = evt.streams[0];
     }
   });
 
@@ -105,6 +226,7 @@ function createPeerConnection() {
 
 function enumerateInputDevices() {
   const populateSelect = (select, devices) => {
+    if (!select) return;
     let counter = 1;
     devices.forEach((device) => {
       const option = document.createElement('option');
@@ -143,25 +265,25 @@ async function negotiate() {
     appendAddon('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    appendAddon(`yolo[draw=true,sampling=${sampling}]`);
+    appendAddon(`yolo[draw=false,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
-    appendAddon('face_landmarker[draw=true]');
+    appendAddon('face_landmarker[draw=false]');
   }
   if (document.getElementById('provider-text-sentiment')?.checked) {
     appendAddon('text_sentiment');
   }
   if (document.getElementById('provider-sam2')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,draw=true,sampling=${sampling}]`);
+    appendAddon(`sam[version=sam2.1_t.pt,draw=false,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-sam3')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,draw=true,sampling=${sampling}]`);
+    appendAddon(`sam[version=sam2.1_t.pt,draw=false,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-inception')?.checked) {
     appendAddon('inception');
   }
   if (document.getElementById('provider-gemini-robotics')?.checked) {
-    appendAddon(`gemini-robotics[draw=true,sampling=${sampling}]`);
+    appendAddon(`gemini-robotics[draw=false,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-insivision')?.checked) {
     appendAddon('insivision');
@@ -239,6 +361,9 @@ async function negotiate() {
     alert(errorMessage);
     window.location.reload();
   }
+  currentSessionId = result.sessionId || null;
+  refreshSessions();
+
   const answer = new RTCSessionDescription({
     type: 'answer',
     sdp: result.sdp,
@@ -247,78 +372,35 @@ async function negotiate() {
 }
 
 async function start() {
-  document.getElementById('start').style.display = 'none';
+  const startBtn = document.getElementById('start');
+  if (startBtn) startBtn.style.display = 'none';
 
   // Reset transcription tracking and clear log
   lastMessageElement = null;
   isAppendingToLast = false;
-  dataChannelLog.innerHTML = '';
+  if (dataChannelLog) dataChannelLog.innerHTML = '';
 
   pc = createPeerConnection();
 
   dc = pc.createDataChannel('data', { ordered: true });
-  dc.addEventListener('close', () => {});
-  dc.addEventListener('open', () => {});
+  dc.addEventListener('close', () => { });
+  dc.addEventListener('open', () => { });
 
   // Unreliable channel for low-latency key events (fire-and-forget)
   dcUnreliable = pc.createDataChannel('keys', { ordered: false, maxRetransmits: 0 });
   dcUnreliable.addEventListener('open', () => {
     heartbeatInterval = setInterval(() => {
       if (dcUnreliable && dcUnreliable.readyState === 'open') {
-        try { dcUnreliable.send('{}'); } catch (_) {}
+        try { dcUnreliable.send('{}'); } catch (_) { }
       }
     }, 20);
   });
-  dc.addEventListener('message', (evt) => {
-    const message = evt.data;
-
-    try {
-      // Try to parse as JSON
-      const data = JSON.parse(message);
-
-      // Show on top of the video feed any data received that has a "display" attribute
-      if (data && typeof data === 'object' && 'display' in data) {
-        const overlay = document.getElementById('video-overlay');
-        if (overlay) {
-          if (data.display !== null && data.display !== undefined && String(data.display).trim() !== '') {
-            overlay.textContent = data.display;
-            overlay.classList.remove('hidden');
-          } else {
-            overlay.textContent = '';
-            overlay.classList.add('hidden');
-          }
-        }
-      }
-
-      if (data.type === 'transcription') {
-        const currentMessageType = data.role; // 'user' or 'model'
-        const content = data.content;
-
-        addOrAppendMessage(currentMessageType, content);
-      } else if (data.type === 'inference') {
-        // Latest raw inference result for a processed frame — replaces
-        // whatever was previously shown, it is not appended.
-        updateInferenceStatus(data.provider, data.content);
-      } else {
-        // Handle other JSON message types if needed - ignore for now
-      }
-    } catch (e) {
-      // Fallback for non-JSON messages (backwards compatibility)
-      const currentMessageType = message.startsWith('<') ? 'model' : message.startsWith('>') ? 'user' : null;
-
-      if (currentMessageType) {
-        // Extract the actual message content (without < or > prefix)
-        const content = message.substring(2);
-        addOrAppendMessage(currentMessageType, content);
-      }
-      // Ignore other non-JSON messages
-    }
-  });
+  dc.addEventListener('message', handleDataChannelMessage);
 
   // Build media constraints.
-  const useAudio = document.getElementById('use-audio').checked;
-  const sendVideo = document.getElementById('send-video').checked;
-  const recvVideo = document.getElementById('recv-video').checked;
+  const useAudio = document.getElementById('use-audio')?.checked || false;
+  const sendVideo = document.getElementById('send-video')?.checked || false;
+  const recvVideo = document.getElementById('recv-video')?.checked || false;
 
   const constraints = {
     audio: false,
@@ -328,7 +410,7 @@ async function start() {
   if (useAudio) {
     const audioConstraints = {};
 
-    const device = document.getElementById('audio-input').value;
+    const device = document.getElementById('audio-input')?.value;
     if (device) {
       audioConstraints.deviceId = { exact: device };
     }
@@ -339,7 +421,7 @@ async function start() {
   if (sendVideo) {
     const videoConstraints = { width: { max: 320 }, height: { max: 240 } };
 
-    const device = document.getElementById('video-input').value;
+    const device = document.getElementById('video-input')?.value;
     if (device) {
       videoConstraints.deviceId = { exact: device };
     }
@@ -355,38 +437,41 @@ async function start() {
     if (caps) {
       const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
       const rest = caps.codecs.filter(c => c.mimeType !== 'video/H264' && c.mimeType !== 'video/VP8');
-      const rtx  = caps.codecs.filter(c => c.mimeType === 'video/rtx');
-      try { vt.setCodecPreferences([...h264, ...rest, ...rtx]); } catch (_) {}
+      const rtx = caps.codecs.filter(c => c.mimeType === 'video/rtx');
+      try { vt.setCodecPreferences([...h264, ...rest, ...rtx]); } catch (_) { }
     }
-    document.getElementById('media').style.display = 'block';
+    const mediaDiv = document.getElementById('media');
+    if (mediaDiv) mediaDiv.style.display = 'block';
   }
 
   if (constraints.audio || constraints.video) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints)
     stream.getTracks().forEach((track) => {
-      if (track.kind === 'video') {
-        track = track.clone();
-        track.applyConstraints({
-          frameRate: 5,
-        });
-      }
       pc.addTrack(track, stream);
     });
     if (constraints.video) {
-      document.getElementById('media').style.display = 'block';
-      document.getElementById('video').srcObject = stream;
+      const mediaDiv = document.getElementById('media');
+      if (mediaDiv) mediaDiv.style.display = 'block';
+      const videoEl = document.getElementById('video');
+      if (videoEl) videoEl.srcObject = stream;
     }
     await negotiate();
   } else {
     await negotiate();
   }
 
-  document.getElementById('stop').style.display = 'inline-block';
+  const stopBtn = document.getElementById('stop');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
 }
 
 async function stop() {
-  document.getElementById('stop').style.display = 'none';
-  document.getElementById('start').style.display = 'inline-block';
+  const stopBtn = document.getElementById('stop');
+  if (stopBtn) stopBtn.style.display = 'none';
+  const startBtn = document.getElementById('start');
+  if (startBtn) startBtn.style.display = 'inline-block';
+
+  currentSessionId = null;
+  refreshSessions();
 
   if (pc) {
     pc.close();
@@ -397,14 +482,21 @@ async function stop() {
   if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
 
   // Clear video sources
-  document.getElementById('video').srcObject = null;
-  document.getElementById('media').style.display = 'none';
+  const videoEl = document.getElementById('video');
+  if (videoEl) videoEl.srcObject = null;
+  const mediaDiv = document.getElementById('media');
+  if (mediaDiv) mediaDiv.style.display = 'none';
 
   // Hide video overlay
   const overlay = document.getElementById('video-overlay');
   if (overlay) {
     overlay.classList.add('hidden');
     overlay.textContent = '';
+  }
+
+  const container = document.getElementById('detection-boxes-container');
+  if (container) {
+    container.innerHTML = '';
   }
 }
 
@@ -416,12 +508,16 @@ var controlEnabled = false;
 function toggleControl() {
   controlEnabled = !controlEnabled;
   const btn = document.getElementById('enable-control');
-  if (controlEnabled) {
-    btn.className = 'w-full bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2';
-    btn.querySelector('span').textContent = 'Control Enabled';
-  } else {
-    btn.className = 'w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors flex items-center justify-center space-x-2';
-    btn.querySelector('span').textContent = 'Enable Control';
+  if (btn) {
+    if (controlEnabled) {
+      btn.className = 'w-full bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2';
+      const span = btn.querySelector('span');
+      if (span) span.textContent = 'Control Enabled';
+    } else {
+      btn.className = 'w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors flex items-center justify-center space-x-2';
+      const span = btn.querySelector('span');
+      if (span) span.textContent = 'Enable Control';
+    }
   }
 }
 
@@ -473,5 +569,160 @@ document.getElementById('provider-inception')?.addEventListener('change', handle
 document.getElementById('provider-gemini-robotics')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
+
+// --- Active sessions ---
+var currentSessionId = null;
+
+function renderSessions(sessions) {
+  const list = document.getElementById('sessions-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (!sessions.length) {
+    const empty = document.createElement('p');
+    empty.className = 'text-sm text-gray-400';
+    empty.textContent = 'No active sessions.';
+    list.appendChild(empty);
+    return;
+  }
+
+  sessions.forEach((session) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center justify-between border rounded-lg px-3 py-2 bg-gray-50';
+
+    const info = document.createElement('a');
+    info.href = `session.html?sessionId=${session.id}`;
+    info.target = '_blank';
+    info.className = 'hover:underline cursor-pointer block';
+
+    const title = document.createElement('div');
+    title.className = 'text-sm font-medium text-primary font-mono';
+    title.textContent = session.id.slice(0, 8) + (session.id === currentSessionId ? ' (you)' : '');
+    const subtitle = document.createElement('div');
+    subtitle.className = 'text-xs text-gray-500';
+    subtitle.textContent = `${session.connections.length} connection${session.connections.length === 1 ? '' : 's'}`;
+    info.appendChild(title);
+    info.appendChild(subtitle);
+    row.appendChild(info);
+
+    if (session.id !== currentSessionId) {
+      const btn = document.createElement('button');
+      btn.className = 'bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors';
+      btn.textContent = 'Join';
+      btn.onclick = () => joinSession(session.id).catch(alert);
+      row.appendChild(btn);
+    }
+
+    list.appendChild(row);
+  });
+}
+
+function renderSessionsError() {
+  const list = document.getElementById('sessions-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const error = document.createElement('p');
+  error.className = 'text-sm text-red-500';
+  error.textContent = 'Server Unavailable';
+  list.appendChild(error);
+}
+
+async function refreshSessions() {
+  try {
+    const response = await fetch(`${BASE_URL}/session`);
+    if (!response.ok) {
+      renderSessionsError();
+      return;
+    }
+    const data = await response.json();
+    renderSessions(data.sessions || []);
+  } catch (e) {
+    renderSessionsError();
+  }
+}
+
+// Join an existing session as a viewer/participant: receive its audio, video
+// and data channel events (and send mic audio when audio is enabled).
+async function joinSession(sessionId) {
+  if (pc) {
+    alert('Already connected. Stop the current session first.');
+    return;
+  }
+
+  const startBtn = document.getElementById('start');
+  if (startBtn) startBtn.style.display = 'none';
+
+  // Reset transcription tracking and clear log
+  lastMessageElement = null;
+  isAppendingToLast = false;
+  if (dataChannelLog) dataChannelLog.innerHTML = '';
+
+  // Make sure incoming video tracks get routed to the video element
+  const recvVideo = document.getElementById('recv-video');
+  if (recvVideo) recvVideo.checked = true;
+
+  pc = createPeerConnection();
+
+  dc = pc.createDataChannel('data', { ordered: true });
+  dc.addEventListener('message', handleDataChannelMessage);
+
+  const useAudio = document.getElementById('use-audio');
+  if (useAudio && useAudio.checked) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+  } else {
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+  }
+
+  const vt = pc.addTransceiver('video', { direction: 'recvonly' });
+  // Prefer H264; strip VP8 so it isn't offered at all.
+  const caps = RTCRtpReceiver.getCapabilities?.('video');
+  if (caps) {
+    const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
+    const rest = caps.codecs.filter(c => c.mimeType !== 'video/H264' && c.mimeType !== 'video/VP8');
+    const rtx = caps.codecs.filter(c => c.mimeType === 'video/rtx');
+    try { vt.setCodecPreferences([...h264, ...rest, ...rtx]); } catch (_) { }
+  }
+  const mediaDiv = document.getElementById('media');
+  if (mediaDiv) mediaDiv.style.display = 'block';
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  let result;
+  try {
+    const response = await fetch(`${BASE_URL}/session/${sessionId}/connection`, {
+      body: JSON.stringify({ sdp: offer.sdp }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    result = await response.json();
+  } catch (error) {
+    console.error('Join session error:', error);
+    alert(`Failed to join session: ${error.message}`);
+    await stop();
+    return;
+  }
+
+  currentSessionId = result.sessionId;
+  await pc.setRemoteDescription(new RTCSessionDescription({
+    type: 'answer',
+    sdp: result.sdp,
+  }));
+
+  const stopBtn = document.getElementById('stop');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
+  refreshSessions();
+}
+
+// Poll the active sessions every 10 seconds
+setInterval(refreshSessions, 10000);
+refreshSessions();
 
 

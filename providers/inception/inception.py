@@ -21,10 +21,6 @@ class InceptionProvider(Model):
     def supports_video(self) -> bool:
         return True
 
-    @property
-    def video_support(self) -> bool:
-        return True
-
     @classmethod
     async def setup(cls):
         if cls._shared_resnet is not None:

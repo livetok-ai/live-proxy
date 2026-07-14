@@ -22,6 +22,8 @@ dependencies = [
     "aiortc",
     "aioquic",
     "aiohttp",
+    "av",
+    "pyee",
     "aiohttp-cors",
     "websockets",
     "taskgroup",

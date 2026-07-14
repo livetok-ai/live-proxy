@@ -88,10 +88,6 @@ class VisionModel(Model):
     def supports_video(self) -> bool:
         return True
 
-    @property
-    def video_support(self) -> bool:
-        return True
-
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.draw_detections = parse_bool(kwargs.get("draw"), False)
@@ -129,6 +125,10 @@ class VisionModel(Model):
         """Called when input is disabled; subclasses should reset whatever
         detection state `draw_overlay` reads."""
         pass
+
+    def notify_objects(self, objects):
+        """Emit the standard 'objects' event with normalized bounding box coordinates."""
+        self._emit("objects", objects)
 
     async def send(self, input: Input):
         if not self.is_ready or not isinstance(input, Image):

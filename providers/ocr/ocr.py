@@ -14,7 +14,7 @@ except ImportError:
     easyocr = None
 
 from logger import log_info, log_warn
-from providers.vision_model import VisionModel, draw_box_with_label
+from providers.vision_model import VisionModel
 
 
 class OCRProvider(VisionModel):
@@ -56,7 +56,7 @@ class OCRProvider(VisionModel):
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.reader = None
-        self.last_drawn_boxes = []
+        self.last_detected_Boxes = []
 
         # Parse languages list (e.g. languages="en+es" or "en,fr")
         langs_str = kwargs.get("languages") or kwargs.get("langs") or "en"
@@ -86,22 +86,7 @@ class OCRProvider(VisionModel):
         self.reader = OCRProvider._shared_reader
 
     def clear_overlay(self):
-        self.last_drawn_boxes = []
-
-    def draw_overlay(self, image: Image) -> Image:
-        if not self.last_drawn_boxes:
-            return image
-
-        drawn_image = image.copy()
-        draw = ImageDraw.Draw(drawn_image)
-
-        for box in self.last_drawn_boxes:
-            label = box["label"]
-            display_label = label if len(label) < 25 else label[:22] + "..."
-            text = f'{display_label} ({box["conf"]:.2f})'
-            draw_box_with_label(draw, box["coords"], text, box["color"], width=2)
-
-        return drawn_image
+        self.last_detected_Boxes = []
 
     async def process_frame(self, image: Image):
         # Convert PIL image to numpy array for EasyOCR
@@ -116,7 +101,7 @@ class OCRProvider(VisionModel):
             results = []
 
         detected_texts = []
-        drawn_boxes = []
+        detected_Boxes = []
 
         if results:
             # Sort results by vertical coordinate (y-min) first, then horizontal (x-min)
@@ -136,12 +121,26 @@ class OCRProvider(VisionModel):
                 coords = [min(xs), min(ys), max(xs), max(ys)]
 
                 color = self.get_color(text_str)
-                drawn_boxes.append({"coords": coords, "label": text_str, "conf": float(conf), "color": color})
+                detected_Boxes.append({"coords": coords, "label": text_str, "conf": float(conf), "color": color})
 
-        self.last_drawn_boxes = drawn_boxes
+        self.last_detected_Boxes = detected_Boxes
 
-        raw = [{"text": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in drawn_boxes]
+        raw = [{"text": b["label"], "coords": b["coords"], "conf": b["conf"]} for b in detected_Boxes]
         self.notify_detections(raw, set(detected_texts))
+
+        objects = []
+        for b in detected_Boxes:
+            x1, y1, x2, y2 = b["coords"]
+            objects.append(
+                {
+                    "label": b["label"],
+                    "left": round(min(1.0, max(0.0, x1 / image.width)), 2),
+                    "top": round(min(1.0, max(0.0, y1 / image.height)), 2),
+                    "right": round(min(1.0, max(0.0, x2 / image.width)), 2),
+                    "bottom": round(min(1.0, max(0.0, y2 / image.height)), 2),
+                }
+            )
+        self.notify_objects(objects)
 
     async def close(self):
         log_info("Closing OCR provider")

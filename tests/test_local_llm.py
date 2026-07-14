@@ -15,7 +15,6 @@ async def test_local_llm_provider_init():
     assert provider.supports_audio is False
     assert provider.supports_text is True
     assert provider.supports_video is False
-    assert provider.video_support is False
     assert provider.model_id == "HuggingFaceTB/SmolLM2-135M-Instruct"
     assert provider.tokenizer is None
     assert provider.model is None

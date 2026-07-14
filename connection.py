@@ -1,7 +1,7 @@
 import asyncio
 import fractions
 import json
-import logging
+import logging  # noqa: F401
 
 # Suppress macOS Objective-C duplicate class warnings from av/cv2 during imports
 import os
@@ -14,7 +14,6 @@ from typing import Optional
 
 # logging.getLogger("aiortc.rtcrtpsender").setLevel(logging.DEBUG)
 # logging.getLogger("aiortc.rtcrtpreceiver").setLevel(logging.DEBUG)
-
 import numpy as np
 
 suppress_objc_warnings = sys.platform == "darwin"
@@ -54,29 +53,28 @@ try:
     )
     from av import AudioFrame, VideoFrame
 
-    from rtp_extensions import install_playout_delay_extension
-
-    # install_playout_delay_extension(min_ms=0, max_ms=0)
-
-    from port_range import get_sip_port_range, get_webrtc_port_range, restrict_ice_gathering_port_range
-
     import metrics
     from logger import log_debug, log_info, log_warn
     from model import Model, ModelEvents
+
+    # install_playout_delay_extension(min_ms=0, max_ms=0)
+    from port_range import get_sip_port_range, get_webrtc_port_range, restrict_ice_gathering_port_range
     from providers.cartesia import CartesiaProvider
     from providers.face_landmarker import FaceLandmarkerProvider
     from providers.gemini import GeminiProvider
     from providers.gemini_robotics import GeminiRoboticsProvider
     from providers.inception import InceptionProvider
+    from providers.insivision import InsivisionProvider
+    from providers.local_llm import LocalLLMProvider
+    from providers.mujoco import MujocoProvider
+    from providers.ocr import OCRProvider
     from providers.openai import OpenAIProvider
     from providers.sam3 import SamProvider
     from providers.simli import SimliProvider
     from providers.text_sentiment import TextSentimentProvider
     from providers.yolo import YoloProvider
-    from providers.local_llm import LocalLLMProvider
-    from providers.ocr import OCRProvider
-    from providers.insivision import InsivisionProvider
-    from providers.mujoco import MujocoProvider
+    from rtp_extensions import install_playout_delay_extension  # noqa: F401
+    from session import SessionEvents, SessionManager
 finally:
     if suppress_objc_warnings:
         try:
@@ -207,6 +205,19 @@ VIDEO_CLOCK_RATE = 90000
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
 
+def _to_mono(frame):
+    """Downmix a packed s16 audio frame to mono (no-op if already mono)."""
+    if frame.layout.name == "mono":
+        return frame
+    channels = len(frame.layout.channels)
+    data = frame.to_ndarray().reshape(-1, channels)
+    mono = data.mean(axis=1).astype(np.int16)
+    out = AudioFrame(format="s16", layout="mono", samples=len(mono))
+    out.planes[0].update(mono.tobytes())
+    out.sample_rate = frame.sample_rate
+    return out
+
+
 class SendingTrack(MediaStreamTrack):
     def __init__(self, kind="audio", *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -250,9 +261,12 @@ class Connection:
         self._data_channel = None  # primary channel (first registered)
         self.data_channels = []  # all channels (up to MAX_DATA_CHANNELS)
         self.public_ip = public_ip
+        self.session = None
         self._connecting = False
         self._closing = False
-        self._recv_genai_tasks = []
+        self._recv_tasks = []
+        self._session_video_pts = 0
+        self._session_video_last_time: Optional[float] = None
 
     async def _prepare(
         self,
@@ -301,6 +315,7 @@ class Connection:
             # that never emit these
             provider_name, _ = parse_model(m.name or "")
             m.on(ModelEvents.INFERENCE, lambda content, _p=provider_name: self._on_inference_event(_p, content))
+            m.on("objects", lambda objects, _p=provider_name: self._on_objects_event(_p, objects))
             for detection_event in ("objects_detected", "texts_detected", "emotions_detected", "faces_detected"):
                 m.on(detection_event, lambda items, _p=provider_name: self._on_detection_event(_p, items))
 
@@ -315,8 +330,8 @@ class Connection:
 
         # 5) Start model-specific tasks (starting receiver tasks)
         for m in self.models:
-            task = asyncio.ensure_future(self._run_recv_genai(m))
-            self._recv_genai_tasks.append(task)
+            task = asyncio.ensure_future(self._run_recv(m))
+            self._recv_tasks.append(task)
 
     async def start(
         self,
@@ -335,8 +350,19 @@ class Connection:
         )
         await self._prepare(model, system_instructions, tools, voice, language, api_key, script)
 
+        return await self._negotiate(sdp)
+
+    async def start_join(self, sdp):
+        """Start a model-less RTC connection that watches and participates in an
+        existing session: it receives the session's audio/video/data channel
+        events and its own incoming media and messages are published back to it."""
+        self.debug("Starting (join) for session %s", self.session.id if self.session else None)
+        return await self._negotiate(sdp, add_audio_track=True)
+
+    async def _negotiate(self, sdp, add_audio_track=False):
+        """Negotiate the RTC (or SIP) connection and return the SDP answer."""
         is_webrtc = "fingerprint" in sdp
-        from sip.peerconnection import SimplePeerConnection
+        from interfaces.sip.peerconnection import SimplePeerConnection
 
         port_range = get_webrtc_port_range() if is_webrtc else get_sip_port_range()
         self.info(
@@ -367,6 +393,8 @@ class Connection:
         await self.pc.setRemoteDescription(offer)
 
         self._add_video_track_if_needed()
+        if add_audio_track:
+            self._add_audio_track_if_needed()
 
         answer = await self.pc.createAnswer()
         if is_webrtc:
@@ -414,6 +442,31 @@ class Connection:
 
         asyncio.ensure_future(self._run())
 
+    async def start_rtmp(
+        self,
+        pc,
+        model,
+        system_instructions=None,
+        tools=None,
+        voice=None,
+        language=None,
+        api_key=None,
+        script=None,
+    ):
+        """Start a connection driven by an RTMP publish session (see interfaces/rtmp/session.py).
+
+        RTMP is ingest-only: no send tracks are added since the publisher does not receive media."""
+        self.debug(
+            f"Starting (rtmp) with {model} {system_instructions} {tools} {voice} {language} {'***' if api_key else 'None'}"
+        )
+        await self._prepare(model, system_instructions, tools, voice, language, api_key, script)
+
+        self.pc = pc
+        self.last_message_time = time.time()
+        self.start_time = time.time()
+
+        asyncio.ensure_future(self._run())
+
     def debug(self, msg, *args):
         log_debug(msg, *args, context=self.id)
 
@@ -435,6 +488,61 @@ class Connection:
                         self.send_video_track = SendingTrack("video")
                         self.pc.addTrack(self.send_video_track)
                         break
+
+    def _add_audio_track_if_needed(self):
+        if not self.send_audio_track and self.pc and hasattr(self.pc, "getTransceivers"):
+            for transceiver in self.pc.getTransceivers():
+                if transceiver.kind == "audio":
+                    if transceiver.direction in ("recvonly", "sendrecv") or transceiver.currentDirection in (
+                        "recvonly",
+                        "sendrecv",
+                    ):
+                        self.info("Track audio added because client wants to receive audio")
+                        self.send_audio_track = SendingTrack("audio")
+                        self.pc.addTrack(self.send_audio_track)
+                        break
+
+    def _publish_to_session(self, event_type, data):
+        """Publish an event (audio/video frame or data channel message) to the
+        session so every other attached connection receives it."""
+        if self.session:
+            self.session.publish(event_type, data, source=self)
+
+    def _session_has_subscribers(self):
+        return self.session is not None and self.session.has_subscribers(source=self)
+
+    def handle_session_event(self, event_type, data, source):
+        """Receive an event published to the session by another connection."""
+        if event_type == SessionEvents.VIDEO:
+            if self.send_video_track:
+                self.send_video_track.queue.put_nowait(data)
+        elif event_type == SessionEvents.AUDIO:
+            self.output_audio_queue.put_nowait(data)
+            # Let the models hear the other participants too
+            for m in self.models:
+                if not m.supports_video:
+                    asyncio.create_task(m.send(data))
+        elif event_type == SessionEvents.MESSAGE:
+            print("Data received")
+            self._broadcast_to_channels(data, publish=False)
+            # Forward other participants' messages to the models so they can participate
+            if source is not None and source.models:
+                return
+            for m in self.models:
+                if not isinstance(m, SimliProvider):
+                    asyncio.create_task(m.send(data))
+
+    def _stamp_session_video_frame(self, frame):
+        """Assign wall-clock pts to a model-generated video frame before it is
+        fanned out, so every subscribed connection shares one consistent timeline."""
+        if frame.pts is None or frame.time_base is None:
+            now = time.time()
+            if self._session_video_last_time is not None:
+                self._session_video_pts += int((now - self._session_video_last_time) * VIDEO_CLOCK_RATE)
+            self._session_video_last_time = now
+            frame.pts = self._session_video_pts
+            frame.time_base = VIDEO_TIME_BASE
+        return frame
 
     def get_model(self, name: str):
         model_name, _ = parse_model(name)
@@ -508,10 +616,18 @@ class Connection:
         message = json.dumps({"type": "inference", "provider": provider_name, "content": content})
         self._broadcast_to_channels(message)
 
+    def _on_objects_event(self, provider_name: str, objects):
+        """Forward the relative bounding box objects of every processed frame to
+        connected clients over the data channel so the UI can render them."""
+        message = json.dumps({"type": "objects", "provider": provider_name, "objects": objects})
+        self._broadcast_to_channels(message)
+
     MAX_DATA_CHANNELS = 10
 
-    def _broadcast_to_channels(self, message: str):
+    def _broadcast_to_channels(self, message: str, publish: bool = True):
         """Broadcast a pre-serialized JSON string to all open data channels."""
+        if publish:
+            self._publish_to_session(SessionEvents.MESSAGE, message)
         sent = False
         for ch in self.data_channels:
             if ch.readyState == "open":
@@ -521,7 +637,11 @@ class Connection:
                 except Exception as e:
                     self.warn(f"Failed to send to channel {ch.label}: {e}")
         if not sent:
-            self.warn("Could not broadcast: no open data channels")
+            pc_type = type(self.pc).__name__ if self.pc else None
+            if pc_type in ("SimplePeerConnection", "RTMPPeerConnection"):
+                self.info(f"Event: {message}")
+            else:
+                self.warn("Could not broadcast: no open data channels")
 
     def send_data(self, data):
         """Send arbitrary data to all clients over data channels, serialized as JSON"""
@@ -545,29 +665,33 @@ class Connection:
             if hasattr(m, "clear"):
                 asyncio.create_task(m.clear())
 
-    async def _run_recv_genai(self, session):
+    async def _run_recv(self, model):
         try:
-            video_session = next((m for m in self.models if hasattr(m, "send_audio")), None)
-            async for frame in session.recv():
+            avatar_model = next((m for m in self.models if hasattr(m, "send_audio") and m != model), None)
+            async for frame in model.recv():
                 if not self.pc or self.pc.connectionState == "closed":
                     break
                 if isinstance(frame, VideoFrame):
+                    frame = self._stamp_session_video_frame(frame)
+                    self._publish_to_session(SessionEvents.VIDEO, frame)
                     if self.send_video_track:
                         if self.first_video_frame:
                             self.first_video_frame = False
                             self._broadcast_to_channels(json.dumps({"type": "video_started"}))
                         self.send_video_track.queue.put_nowait(frame)
                 elif isinstance(frame, AudioFrame):
-                    if session == video_session:
+                    if model == avatar_model:
+                        self._publish_to_session(SessionEvents.AUDIO, frame)
                         if self.send_audio_track:
                             self.send_audio_track.queue.put_nowait(frame)
                     else:
-                        if video_session:
-                            asyncio.create_task(video_session.send_audio(frame))
+                        if avatar_model:
+                            asyncio.create_task(avatar_model.send_audio(frame))
                         else:
+                            self._publish_to_session(SessionEvents.AUDIO, frame)
                             self.output_audio_queue.put_nowait(frame)
         except Exception as e:
-            self.info("Error receiving from genai: %s", e)
+            self.info("Error receiving from %s: %s", model, e)
 
     def _add_model_internal(self, name: str, kwargs: Optional[dict] = None) -> Optional[Model]:
         if self._connecting:
@@ -635,9 +759,12 @@ class Connection:
             @channel.on("message")
             async def on_message(message):
                 self.last_message_time = time.time()
-                for m in self.models:
-                    if not isinstance(m, SimliProvider):
-                        await m.send(message)
+                # Publish to the session (skip heartbeats) so other participants receive it
+                if isinstance(message, str) and message != "{}":
+                    self._publish_to_session(SessionEvents.MESSAGE, message)
+                    for m in self.models:
+                        if not isinstance(m, SimliProvider):
+                            await m.send(message)
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -651,9 +778,7 @@ class Connection:
             if not self.connected and self.pc and self.pc.connectionState == "connected":
                 self.connected = True
 
-                has_llm = any(m.is_llm for m in self.models)
-                if has_llm:
-                    await self.on_established()
+                await self.on_established()
 
         @self.pc.on("track")
         def on_track(track):
@@ -665,9 +790,10 @@ class Connection:
                     return
 
                 self.recv_audio_track = track
-                self.send_audio_track = SendingTrack("audio")
-                self.info("Track audio added")
-                self.pc.addTrack(self.send_audio_track)
+                if not self.send_audio_track:
+                    self.send_audio_track = SendingTrack("audio")
+                    self.info("Track audio added")
+                    self.pc.addTrack(self.send_audio_track)
                 asyncio.ensure_future(run_recv_audio_track())
 
             elif track.kind == "video":
@@ -676,7 +802,6 @@ class Connection:
                     return
 
                 self.recv_video_track = track
-                self.info("Track video received")
                 asyncio.ensure_future(run_recv_video_track())
 
             @track.on("ended")
@@ -692,8 +817,10 @@ class Connection:
                     # Ignore first 3 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
                     if time.time() - start_time < 3:
                         continue
+                    if self._session_has_subscribers():
+                        self._publish_to_session(SessionEvents.AUDIO, _to_mono(frame))
                     for m in self.models:
-                        if not m.video_support:
+                        if not m.supports_video:
                             await m.send(frame)
 
                 except Exception as e:
@@ -705,6 +832,7 @@ class Connection:
                 try:
                     frame = await self.recv_video_track.recv()
                     self.last_message_time = time.time()
+                    self._publish_to_session(SessionEvents.VIDEO, frame)
                     has_active_video_models = any(m.supports_video for m in self.models)
                     if not has_active_video_models:
                         continue
@@ -736,7 +864,7 @@ class Connection:
                     samples = int(sample_rate * AUDIO_PTIME)
                     buffer += frame.to_ndarray().tobytes()
 
-                # Don't send audio until we have at least one genai frame to
+                # Don't send audio until we have at least one frame to
                 # learn the sample rate
                 if sample_rate:
                     audio_frame = AudioFrame(format="s16", layout="mono", samples=samples)
@@ -802,6 +930,9 @@ class Connection:
         self._closing = True
         self.info("Closing connection")
 
+        if self.session:
+            self.session.detach(self)
+
         if not getattr(self, "_teardown_called", False):
             self._teardown_called = True
             try:
@@ -822,7 +953,7 @@ class Connection:
         for m in models_to_close:
             await m.close()
 
-        recv_tasks, self._recv_genai_tasks = self._recv_genai_tasks, []
+        recv_tasks, self._recv_tasks = self._recv_tasks, []
         for t in recv_tasks:
             t.cancel()
         if recv_tasks:
@@ -867,8 +998,11 @@ class ConnectionManager:
         self._closed_callback = closed_callback
         self._tool_call_callback = tool_call_callback
 
-    def create_connection(self, callback=None, metadata=None, public_ip=None):
-        """Create a new connection and add it to the manager."""
+    def create_connection(self, callback=None, metadata=None, public_ip=None, session=None):
+        """Create a new connection and add it to the manager.
+
+        The connection is attached to the given session, or to a newly created
+        one when no session is provided."""
 
         def on_connection_closed(connection):
             # Find and remove the connection info
@@ -897,6 +1031,10 @@ class ConnectionManager:
         conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
         self.connections.add(conn_info)
 
+        if session is None:
+            session = SessionManager().create_session()
+        session.attach(connection)
+
         # Update metrics
         metrics.increment_connection()
         metrics.set_open_connections(len(self.connections))
@@ -916,6 +1054,8 @@ class ConnectionManager:
 
     def remove_connection(self, conn_info):
         """Remove a connection from the manager."""
+        if conn_info.connection.session:
+            conn_info.connection.session.detach(conn_info.connection)
         self.connections.discard(conn_info)
         # Update metrics
         metrics.set_open_connections(len(self.connections))

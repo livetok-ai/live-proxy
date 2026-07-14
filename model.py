@@ -15,15 +15,19 @@ class ModelEvents:
     INPUT_TRANSCRIPTION = "input_transcription"
     OUTPUT_TRANSCRIPTION = "output_transcription"
     INTERRUPTED = "interrupted"
+    INFERENCE = "inference"
 
 
 class Model:
+    DETECTION_EVENT = "objects_detected"
+
     def __init__(self, name=None, connection=None, **kwargs):
         self.name = name
         self.connection = connection
         self._event_handlers = defaultdict(list)
         self.input_enabled = True
         self.output_enabled = True
+        self._last_detections = None
 
     async def connect(self):
         pass
@@ -38,10 +42,6 @@ class Model:
 
     @property
     def supports_video(self) -> bool:
-        return False
-
-    @property
-    def video_support(self) -> bool:
         return False
 
     @property
@@ -78,6 +78,30 @@ class Model:
         """
         if handler in self._event_handlers[event_type]:
             self._event_handlers[event_type].remove(handler)
+
+    def notify_detections(self, raw, labels):
+        """Emit the per-frame "inference" event with the raw result and, when the
+        detected labels changed since the last notification (including the first
+        one), the provider-specific detection event (see DETECTION_EVENT).
+
+        `labels` can be a set/iterable of labels (emitted as a sorted list) or a
+        single label string (emitted as-is)."""
+        self._emit(ModelEvents.INFERENCE, raw)
+
+        if labels is None:
+            normalized = set()
+        elif isinstance(labels, str):
+            normalized = {labels}
+        else:
+            normalized = set(labels)
+
+        if self._last_detections is None or normalized != self._last_detections:
+            self._last_detections = normalized
+            self._emit(self.DETECTION_EVENT, labels if isinstance(labels, str) else sorted(normalized))
+
+    def reset_detections(self):
+        """Forget the last notified labels so the next notification re-emits."""
+        self._last_detections = None
 
     def _emit(self, event_type: str, data: Optional[Any] = None):
         """Emit an event to all registered handlers.

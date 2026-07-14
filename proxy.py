@@ -38,9 +38,11 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
 
 
 from connection import ConnectionManager
-from logger import log_info
-from sip import SIPServer
-from webtransport import WebTransportServer
+from interfaces.rtmp import RTMPServer
+from interfaces.sip import SIPServer
+from interfaces.webtransport import WebTransportServer
+from logger import log_info, log_warn
+from session import SessionManager
 
 
 def in_venv():
@@ -64,6 +66,8 @@ class HTTPServer:
         self.app.router.add_post("/connection", self.create_connection)
         self.app.router.add_delete("/connection/{connection_id}", self.delete_connection)
         self.app.router.add_put("/connection/{connection_id}", self.update_connection)
+        self.app.router.add_get("/session", self.list_sessions)
+        self.app.router.add_post("/session/{session_id}/connection", self.create_session_connection)
         self.app.router.add_get("/metrics", self.metrics_endpoint)
         self.app.router.add_get("/webtransport-info", self.webtransport_info)
         self.app.router.add_static("/demo", os.path.join(os.path.dirname(__file__), "demo"))
@@ -72,10 +76,11 @@ class HTTPServer:
         await connections.close_all()
 
     async def start(self):
-        log_info(f"HTTP server listening on {self.host}:{self.port}")
+        log_info(f"HTTP server listening on {self.host}:{self.port} (TCP)")
         await web._run_app(
             self.app,
             access_log=None,
+            print=None,
             host=self.host,
             port=self.port,
             ssl_context=self.ssl_context,
@@ -141,12 +146,74 @@ class HTTPServer:
                     {
                         "sdp": sdp_response,
                         "id": conn_info.connection.id,
+                        "sessionId": conn_info.connection.session.id,
                     }
                 ),
             )
-        except Exception:
+        except web.HTTPException:
             connections.remove_connection(conn_info)
             raise
+        except Exception as e:
+            connections.remove_connection(conn_info)
+            log_warn(f"Failed to start connection {conn_info.connection.id}: {e}")
+            raise web.HTTPBadGateway(text=f"Failed to start connection: {e}") from None
+
+    async def list_sessions(self, request):
+        """List all running sessions and their attached connections."""
+        sessions = SessionManager().list_sessions()
+        return web.Response(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "sessions": [
+                        {
+                            "id": session.id,
+                            "created_at": int(session.created_at * 1000),
+                            "connections": [connection.id for connection in session.connections],
+                        }
+                        for session in sessions
+                    ]
+                }
+            ),
+        )
+
+    async def create_session_connection(self, request):
+        """Connect to an existing session over WebRTC to watch and participate in it."""
+        session_id = request.match_info.get("session_id")
+        log_info(f"HTTP create session connection request {session_id}")
+
+        session = SessionManager().find_session_by_id(session_id)
+        if not session:
+            raise web.HTTPNotFound(text="Session not found")
+
+        body = await request.json()
+        sdp = body.get("sdp")
+        if not sdp:
+            raise web.HTTPBadRequest(text="Missing 'sdp' parameter in JSON body")
+
+        conn_info = connections.create_connection(
+            callback=body.get("callback"), metadata=body.get("metadata"), session=session
+        )
+
+        try:
+            sdp_response = await conn_info.connection.start_join(sdp)
+            return web.Response(
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "sdp": sdp_response,
+                        "id": conn_info.connection.id,
+                        "sessionId": session.id,
+                    }
+                ),
+            )
+        except web.HTTPException:
+            connections.remove_connection(conn_info)
+            raise
+        except Exception as e:
+            connections.remove_connection(conn_info)
+            log_warn(f"Failed to join session {session.id}: {e}")
+            raise web.HTTPBadGateway(text=f"Failed to join session: {e}") from None
 
     async def delete_connection(self, request):
         connection_id = request.match_info.get("connection_id")
@@ -314,8 +381,42 @@ async def _on_webtransport_session(pc, params):
         raise
 
 
-async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_url, wt_host, wt_port, wt_ssl_context):
-    """Run the web app, SIP server and WebTransport/QUIC server concurrently."""
+async def _on_rtmp_session(pc, params):
+    """Called once an RTMP client starts publishing (params parsed from the stream key query string)."""
+    log_info(f"RTMP session starting model={params.get('model')} metadata={params.get('metadata')}")
+
+    conn_info = connections.create_connection(callback=params.get("callback"), metadata=params.get("metadata"))
+    try:
+        await conn_info.connection.start_rtmp(
+            pc,
+            model=params.get("model"),
+            system_instructions=params.get("system_instructions"),
+            tools=params.get("tools"),
+            voice=params.get("voice"),
+            language=params.get("language"),
+            api_key=params.get("api_key"),
+            script=params.get("script"),
+        )
+    except Exception:
+        connections.remove_connection(conn_info)
+        raise
+
+
+async def run_servers(
+    host,
+    port,
+    ssl_context,
+    sip_host,
+    sip_port,
+    sip_callback_url,
+    wt_host,
+    wt_port,
+    wt_ssl_context,
+    rtmp_host,
+    rtmp_port,
+    rtmp_callback_url,
+):
+    """Run the web app, SIP server, WebTransport/QUIC server and RTMP server concurrently."""
     # Setup all models before starting the servers
     # from connection import MODEL_MAP
 
@@ -340,9 +441,17 @@ async def run_servers(host, port, ssl_context, sip_host, sip_port, sip_callback_
         private_key=wt_ssl_context[1] if wt_ssl_context else None,
     )
 
-    # Wait for all to complete (or until one fails)
+    rtmp_server = RTMPServer(
+        host=rtmp_host, port=rtmp_port, on_session=_on_rtmp_session, callback_url=rtmp_callback_url
+    )
+
+    # Bind all servers first so every "listening" log shows up together at startup
     try:
-        await asyncio.gather(http_server.start(), sip_server.start(), webtransport_server.start())
+        await sip_server.bind()
+        await webtransport_server.bind()
+        await rtmp_server.bind()
+        # Wait for all to complete (or until one fails)
+        await asyncio.gather(http_server.start(), sip_server.start(), webtransport_server.start(), rtmp_server.start())
     except Exception as e:
         log_info(f"Error running servers: {e}")
         raise
@@ -359,18 +468,25 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--sip-host", default=None)
     parser.add_argument("--sip-port", type=int, default=5060)
-    parser.add_argument("--sip-callback-url")
+    parser.add_argument("--sip-callback-url", default=os.getenv("SIP_CALLBACK_URL"))
     parser.add_argument("--wt-host", default="0.0.0.0")
     parser.add_argument("--wt-port", type=int, default=4433)
     parser.add_argument("--wt-cert-file")
     parser.add_argument("--wt-key-file")
+    parser.add_argument("--rtmp-host", default="0.0.0.0")
+    parser.add_argument("--rtmp-port", type=int, default=1935)
+    parser.add_argument("--rtmp-callback-url", default=os.getenv("RTMP_CALLBACK_URL"))
+    parser.add_argument("--log-level", default="INFO", help="Logging level (TRACE, DEBUG, INFO, WARNING, ERROR)")
     args = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        level=args.log_level.upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     logging.getLogger("aioice").setLevel(level=logging.WARN)
     logging.getLogger("httpx").setLevel(level=logging.WARNING)
+    logging.getLogger("google_genai.models").setLevel(level=logging.WARNING)
 
     if args.cert_file:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -405,5 +521,8 @@ if __name__ == "__main__":
             args.wt_host,
             args.wt_port,
             wt_ssl_context,
+            args.rtmp_host,
+            args.rtmp_port,
+            args.rtmp_callback_url,
         )
     )

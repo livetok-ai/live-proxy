@@ -15,7 +15,7 @@ from av import AudioFrame, VideoFrame
 from PIL import Image
 from pyee.asyncio import AsyncIOEventEmitter
 
-from webtransport.protocol import (
+from interfaces.webtransport.protocol import (
     FRAME_TYPE_AUDIO,
     FRAME_TYPE_CONTROL,
     FRAME_TYPE_VIDEO,

@@ -21,7 +21,7 @@ class InsivisionProvider(Model):
         return False
 
     @property
-    def video_support(self) -> bool:
+    def supports_video(self) -> bool:
         return True
 
     def __init__(self, name=None, connection=None, **kwargs):
