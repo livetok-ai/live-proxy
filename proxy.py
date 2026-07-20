@@ -402,6 +402,20 @@ async def _on_rtmp_session(pc, params):
         raise
 
 
+async def setup_all_providers():
+    """Eagerly run every provider's setup() (model downloads/loads) up front,
+    so the first real connection isn't stuck waiting on it."""
+    from connection import MODEL_MAP
+
+    log_info("Initializing and setting up all models...")
+    for model_cls in set(MODEL_MAP.values()):
+        try:
+            await model_cls.setup()
+            log_info(f"Set up model class: {model_cls.__name__}")
+        except Exception as e:
+            log_info(f"Error setting up model class {model_cls.__name__}: {e}")
+
+
 async def run_servers(
     host,
     port,
@@ -415,19 +429,11 @@ async def run_servers(
     rtmp_host,
     rtmp_port,
     rtmp_callback_url,
+    setup=False,
 ):
     """Run the web app, SIP server, WebTransport/QUIC server and RTMP server concurrently."""
-    # Setup all models before starting the servers
-    # from connection import MODEL_MAP
-
-    # log_info("Initializing and setting up all models...")
-    # for model_cls in set(MODEL_MAP.values()):
-    #     try:
-    #         res = await model_cls.setup()
-    #         suffix = f" ({res})" if res else ""
-    #         log_info(f"Setting up model class: {model_cls.__name__}{suffix}")
-    #     except Exception as e:
-    #         log_info(f"Error setting up model class {model_cls.__name__}: {e}")
+    if setup:
+        await setup_all_providers()
 
     global webtransport_server
 
@@ -477,6 +483,12 @@ if __name__ == "__main__":
     parser.add_argument("--rtmp-port", type=int, default=1935)
     parser.add_argument("--rtmp-callback-url", default=os.getenv("RTMP_CALLBACK_URL"))
     parser.add_argument("--log-level", default="INFO", help="Logging level (TRACE, DEBUG, INFO, WARNING, ERROR)")
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Eagerly load/set up all providers (download and load models) before starting the servers, "
+        "instead of lazily on first use",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -524,5 +536,6 @@ if __name__ == "__main__":
             args.rtmp_host,
             args.rtmp_port,
             args.rtmp_callback_url,
+            setup=args.setup,
         )
     )

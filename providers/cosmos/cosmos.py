@@ -54,7 +54,7 @@ class CosmosProvider(VisionModel):
     _shared_lock = None
 
     @classmethod
-    async def setup(cls, model_id: str):
+    async def setup(cls, model_id: str = DEFAULT_MODEL):
         if cls._shared_lock is None:
             cls._shared_lock = asyncio.Lock()
 
