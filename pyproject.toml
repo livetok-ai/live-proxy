@@ -92,6 +92,8 @@ extend-exclude = '''
 [tool.ruff]
 target-version = "py38"
 line-length = 120
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -107,7 +109,7 @@ ignore = [
     "C901",  # too complex
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "proxy.py" = ["E402"]
 
