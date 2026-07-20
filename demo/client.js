@@ -100,16 +100,40 @@ function getColorForLabel(label) {
 
 function renderObjects(objects) {
   const container = document.getElementById('detection-boxes-container');
-  if (!container) return;
+  const labelsContainer = document.getElementById('detection-labels-container');
 
-  // Clear previous boxes
-  container.innerHTML = '';
+  if (container) container.innerHTML = '';
+  if (labelsContainer) labelsContainer.innerHTML = '';
 
   if (!objects || !Array.isArray(objects)) return;
 
   objects.forEach(obj => {
     const { label, top, left, bottom, right } = obj;
-    if (top === undefined || left === undefined || bottom === undefined || right === undefined) return;
+    const hasCoords = top !== undefined && left !== undefined && bottom !== undefined && right !== undefined;
+
+    if (!hasCoords) {
+      // No bounding box for this detection: surface the label as a pill
+      // overlay at the top of the video instead of drawing a box.
+      if (!labelsContainer) return;
+
+      const color = getColorForLabel(label);
+
+      const pill = document.createElement('span');
+      pill.style.backgroundColor = color;
+      pill.style.opacity = '0.85';
+      pill.style.color = 'white';
+      pill.style.fontSize = '12px';
+      pill.style.fontWeight = 'bold';
+      pill.style.padding = '4px 10px';
+      pill.style.borderRadius = '9999px';
+      pill.style.whiteSpace = 'nowrap';
+      pill.textContent = label;
+
+      labelsContainer.appendChild(pill);
+      return;
+    }
+
+    if (!container) return;
 
     // Convert relative coordinates [0, 1] to percentages
     const pctLeft = (left * 100).toFixed(2) + '%';
@@ -290,6 +314,9 @@ async function negotiate() {
   }
   if (document.getElementById('provider-mujoco')?.checked) {
     appendAddon('mujoco');
+  }
+  if (document.getElementById('provider-cosmos')?.checked) {
+    appendAddon(`cosmos[sampling=${sampling}]`);
   }
   const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
@@ -498,6 +525,10 @@ async function stop() {
   if (container) {
     container.innerHTML = '';
   }
+  const labelsContainer = document.getElementById('detection-labels-container');
+  if (labelsContainer) {
+    labelsContainer.innerHTML = '';
+  }
 }
 
 enumerateInputDevices();
@@ -546,8 +577,9 @@ const handleProviderChange = () => {
   const insivisionChecked = document.getElementById('provider-insivision')?.checked;
   const mujocoChecked = document.getElementById('provider-mujoco')?.checked;
   const geminiRoboticsChecked = document.getElementById('provider-gemini-robotics')?.checked;
+  const cosmosChecked = document.getElementById('provider-cosmos')?.checked;
 
-  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiRoboticsChecked) {
+  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiRoboticsChecked || cosmosChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
@@ -569,6 +601,7 @@ document.getElementById('provider-inception')?.addEventListener('change', handle
 document.getElementById('provider-gemini-robotics')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-cosmos')?.addEventListener('change', handleProviderChange);
 
 // --- Active sessions ---
 var currentSessionId = null;

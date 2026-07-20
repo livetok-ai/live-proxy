@@ -169,6 +169,13 @@
                     <span>MuJoCo</span>
                   </label>
                 </div>
+                <div class="flex items-center">
+                  <input id="provider-cosmos" type="checkbox"
+                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                  <label for="provider-cosmos" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>Cosmos</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -411,6 +418,7 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
               <video id="video" autoplay="true" playsinline="true" muted="true"
                 class="w-full"></video>
               <div id="detection-boxes-container" class="absolute inset-0 pointer-events-none"></div>
+              <div id="detection-labels-container" class="absolute top-2 left-2 right-2 flex flex-wrap gap-2 pointer-events-none"></div>
               <div id="video-overlay" class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded text-sm hidden font-medium pointer-events-none transition-all duration-300"></div>
             </div>
             <button id="enable-control" onclick="toggleControl()"
