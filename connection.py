@@ -607,14 +607,13 @@ class Connection:
         """Forward provider detection/classification results (YOLO
         objects_detected, OCR texts_detected, face-landmarker
         emotions_detected, inception faces_detected, ...) to connected
-        clients over the data channel so the UI can log them as timeline
-        events."""
+        clients as "objects" events, same as bounding-box detections, but
+        without coordinates so the UI renders them as label pills."""
         if items is None:
             items = []
         elif not isinstance(items, (list, tuple, set)):
             items = [items]
-        message = json.dumps({"type": "detections", "provider": provider_name, "items": list(items)})
-        self._broadcast_to_channels(message)
+        self._on_objects_event(provider_name, [{"label": str(item)} for item in items])
 
     def _on_inference_event(self, provider_name: str, content):
         """Forward the raw inference result of every processed frame to

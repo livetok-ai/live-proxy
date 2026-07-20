@@ -98,6 +98,22 @@ function getColorForLabel(label) {
   return detectionColors[Math.abs(h) % detectionColors.length];
 }
 
+// Log every non-heartbeat data channel message (sent or received) to the
+// console, so the datachannel traffic can be inspected while debugging.
+function isHeartbeatMessage(data) {
+  return data === '{}';
+}
+
+function logDataChannelMessage(direction, channelLabel, data) {
+  if (isHeartbeatMessage(data)) return;
+  console.log(`[datachannel:${channelLabel}] ${direction}`, data);
+}
+
+function sendDataChannelMessage(channel, data) {
+  logDataChannelMessage('send', channel && channel.label, data);
+  channel.send(data);
+}
+
 function renderObjects(objects) {
   const container = document.getElementById('detection-boxes-container');
   const labelsContainer = document.getElementById('detection-labels-container');
@@ -172,6 +188,8 @@ function renderObjects(objects) {
 
 function handleDataChannelMessage(evt) {
   const message = evt.data;
+
+  logDataChannelMessage('recv', evt.target && evt.target.label, message);
 
   try {
     // Try to parse as JSON
@@ -418,7 +436,7 @@ async function start() {
   dcUnreliable.addEventListener('open', () => {
     heartbeatInterval = setInterval(() => {
       if (dcUnreliable && dcUnreliable.readyState === 'open') {
-        try { dcUnreliable.send('{}'); } catch (_) { }
+        try { sendDataChannelMessage(dcUnreliable, '{}'); } catch (_) { }
       }
     }, 20);
   });
@@ -560,7 +578,7 @@ function sendKeyEvent(type, evt) {
   if (ARROW_KEYS.has(evt.key)) evt.preventDefault();
   const ch = dcUnreliable && dcUnreliable.readyState === 'open' ? dcUnreliable : dc;
   if (!ch || ch.readyState !== 'open') return;
-  ch.send(JSON.stringify({ type, key: evt.key, code: evt.code }));
+  sendDataChannelMessage(ch, JSON.stringify({ type, key: evt.key, code: evt.code }));
 }
 
 document.addEventListener('keydown', (evt) => sendKeyEvent('keydown', evt));
