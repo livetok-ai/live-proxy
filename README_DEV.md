@@ -89,13 +89,16 @@ pytest tests/test_proxy.py::test_basic_import -v
 ├── pyproject.toml          # Modern Python project configuration
 ├── .venv/                  # Virtual environment (uv creates this)
 ├── uv.lock                 # Lock file (created by uv sync)
-├── tests/                  # Test directory
-│   ├── __init__.py
-│   └── test_proxy.py       # Basic tests for proxy module
-├── proxy.py                # Main proxy server
-├── logger.py               # Logging utilities
-├── model*.py               # AI model integrations
-└── requirements.txt        # Legacy dependencies (can be removed)
+├── proxy.py                # Main proxy server (HTTP control API, WebRTC signaling, entry point)
+├── connection.py            # Connection setup, MODEL_MAP, media pipeline wiring
+├── model.py                 # Base Model interface implemented by every provider
+├── session.py                # Session manager (multiple connections per session)
+├── logger.py                  # Logging utilities
+├── metrics.py                  # Prometheus metrics
+├── interfaces/                  # Non-WebRTC transports: rtmp/, sip/, webtransport/
+├── providers/                    # One subdirectory per AI model (gemini/, openai/, yolo/, ...)
+├── demo/                          # Browser demo pages
+└── tests/                          # Test suite
 ```
 
 ## Configuration
