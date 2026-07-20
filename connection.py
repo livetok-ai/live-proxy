@@ -647,6 +647,12 @@ class Connection:
             pc_type = type(self.pc).__name__ if self.pc else None
             if pc_type in ("SimplePeerConnection", "RTMPPeerConnection"):
                 self.trace(f"Event: {message}")
+            elif self.data_channels:
+                # A data channel was negotiated but hasn't reached "open" yet
+                # (SCTP handshake lags a bit behind ICE/DTLS "connected").
+                # This is a normal, short-lived race right after connect, not
+                # an error, so don't spam the logs at warn level for it.
+                self.trace("Could not broadcast: data channel(s) not open yet")
             else:
                 self.warn("Could not broadcast: no open data channels")
 

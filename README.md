@@ -179,7 +179,7 @@ The `model` parameter (or `model` query param for RTMP) selects the provider; pr
 | `gemini` | Google Gemini | Speech-to-speech / multimodal LLM | Requires `GOOGLE_API_KEY` (or Vertex AI via `GOOGLE_GENAI_USE_VERTEXAI` + service account). |
 | `openai` | OpenAI Realtime | Speech-to-speech LLM | Requires `OPENAI_API_KEY`. |
 | `gemini-robotics` | Gemini Robotics-ER | Vision — object detection for robot manipulation | Requires `GOOGLE_API_KEY`. |
-| `cosmos` | NVIDIA Cosmos Reason | Vision — sliding-window video understanding via an OpenAI-compatible (vLLM) endpoint | Requires `COSMOS_API_KEY`/`COSMOS_ENDPOINT`. |
+| `cosmos` | NVIDIA Cosmos (`nvidia/Cosmos3-Nano` by default) | Vision — sliding-window video understanding, run locally via `transformers` | Downloaded and cached on first use; no API key. Needs a GPU for reasonable latency. |
 | `local_llm` | Hugging Face `transformers` | Local/self-hosted text LLM | Downloaded and cached on first use; no API key. |
 | `cartesia` | Cartesia | Text-to-speech | Requires `CARTESIA_API_KEY`. |
 | `simli` | Simli | Real-time avatar video (audio-driven talking face) | Requires `SIMLI_API_KEY` (+ `SIMLI_FACE_ID`). |

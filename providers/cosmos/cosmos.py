@@ -7,16 +7,16 @@ import time
 from collections import deque
 from datetime import datetime
 
-from openai import AsyncOpenAI
+import torch
 from PIL import ImageDraw
 from PIL.Image import Image
+from transformers import AutoProcessor, Cosmos3OmniForConditionalGeneration
 
 from logger import log_info, log_warn
 from providers.vision_model import VisionModel
 from utils import parse_bool, parse_int
 
-DEFAULT_MODEL = "nvidia/Cosmos-Reason2-2B"
-DEFAULT_ENDPOINT = "http://localhost:8000/v1"
+DEFAULT_MODEL = "nvidia/Cosmos3-Nano"
 DEFAULT_PROMPT = (
     "You are watching frames sampled from the last few seconds of a live camera stream. "
     "Describe concisely what is happening, focusing on people, objects and actions. "
@@ -24,37 +24,64 @@ DEFAULT_PROMPT = (
 )
 
 # Sliding-window defaults matching NVIDIA's RT-VLM reference design
-# (chunked stateless requests against a vLLM OpenAI-compatible endpoint).
+# (chunked stateless requests, now run through a local Cosmos3-Nano model).
 DEFAULT_WINDOW_SECONDS = 8
 DEFAULT_OVERLAP_SECONDS = 2
 DEFAULT_FPS = 4
 DEFAULT_RESOLUTION = 448
 DEFAULT_MAX_TOKENS = 1024
 
-THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+# Reasoning models emit an optional <think>...</think> block before the answer.
+THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 
 class CosmosProvider(VisionModel):
-    """Provider for NVIDIA Cosmos Reason served through an OpenAI-compatible
-    endpoint (vLLM). Cosmos has no streaming video input, so the live stream is
-    processed as a sliding window of sampled frames: every `window` seconds the
-    frames captured at `fps` are sent as one multi-image request, with the last
+    """Provider for NVIDIA Cosmos, run locally through transformers. Cosmos has
+    no streaming video input, so the live stream is processed as a sliding
+    window of sampled frames: every `window` seconds the frames captured at
+    `fps` are sent as one multi-image generation call, with the last
     `overlap` seconds shared between consecutive windows for temporal
     continuity."""
 
     # Frames are sampled by wall-clock time (`fps`), not by frame count.
     DEFAULT_SAMPLING_RATE = 1
 
+    # Model + processor are loaded once per process and shared across
+    # connections/providers, like YoloProvider does for its ultralytics model.
+    _shared_model = None
+    _shared_processor = None
+    _shared_model_id = None
+    _shared_lock = None
+
+    @classmethod
+    async def setup(cls, model_id: str):
+        if cls._shared_lock is None:
+            cls._shared_lock = asyncio.Lock()
+
+        async with cls._shared_lock:
+            if cls._shared_model is not None and cls._shared_model_id == model_id:
+                return
+
+            log_info(f"Loading Cosmos model: {model_id} (this can take a while)...")
+            loop = asyncio.get_event_loop()
+            start = time.monotonic()
+
+            def _load():
+                processor = AutoProcessor.from_pretrained(model_id)
+                model = Cosmos3OmniForConditionalGeneration.from_pretrained(
+                    model_id,
+                    dtype=torch.bfloat16,
+                    device_map="auto",
+                )
+                return processor, model
+
+            cls._shared_processor, cls._shared_model = await loop.run_in_executor(None, _load)
+            cls._shared_model_id = model_id
+            log_info(f"Loaded Cosmos model: {model_id} in {time.monotonic() - start:.1f}s")
+
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.model = kwargs.get("model") or os.getenv("COSMOS_MODEL") or DEFAULT_MODEL
-        self.endpoint = kwargs.get("endpoint") or os.getenv("COSMOS_ENDPOINT") or DEFAULT_ENDPOINT
-        self.api_key = (
-            kwargs.get("api_key")
-            or (connection.api_key if connection else None)
-            or os.getenv("COSMOS_API_KEY")
-            or "EMPTY"
-        )
         self.prompt = kwargs.get("prompt") or os.getenv("COSMOS_PROMPT") or DEFAULT_PROMPT
 
         self.window_seconds = parse_int(
@@ -85,25 +112,29 @@ class CosmosProvider(VisionModel):
             )
             self.overlap_seconds = min(DEFAULT_OVERLAP_SECONDS, self.window_seconds - 1)
 
-        self.client = None
+        self.processor = None
+        self._model_instance = None
         self.last_answer = ""
 
         # Rolling buffer of (monotonic_ts, data_uri) covering the last `window` seconds.
         self._frames = deque()
-        self._last_capture = 0.0
+        # -inf, not 0.0: a real (or mocked) clock reading can legitimately be
+        # 0.0, which would make the very first frame look like it arrived
+        # within 1/fps of an already-captured frame and get dropped.
+        self._last_capture = float("-inf")
         self._first_capture = None
         self._last_dispatch = None
         self._inference_inflight = False
 
         log_info(
-            f"Cosmos provider model: {self.model} endpoint: {self.endpoint} window: {self.window_seconds}s "
+            f"Cosmos provider model: {self.model} window: {self.window_seconds}s "
             f"overlap: {self.overlap_seconds}s fps: {self.fps} resolution: {self.resolution} "
             f"timestamps: {self.add_timestamps} draw: {self.draw_detections}"
         )
 
     @property
     def is_ready(self) -> bool:
-        return self.client is not None
+        return self._model_instance is not None and self.processor is not None
 
     @property
     def stride_seconds(self) -> int:
@@ -111,7 +142,9 @@ class CosmosProvider(VisionModel):
         return self.window_seconds - self.overlap_seconds
 
     async def connect(self):
-        self.client = AsyncOpenAI(base_url=self.endpoint, api_key=self.api_key)
+        await CosmosProvider.setup(self.model)
+        self.processor = CosmosProvider._shared_processor
+        self._model_instance = CosmosProvider._shared_model
 
     def _now(self) -> float:
         """Monotonic clock, overridable in tests."""
@@ -166,22 +199,45 @@ class CosmosProvider(VisionModel):
         data = base64.b64encode(buffer.getvalue()).decode("ascii")
         return f"data:image/jpeg;base64,{data}"
 
+    def _generate(self, messages):
+        """Blocking generation call, run in a thread executor to keep the
+        asyncio event loop responsive."""
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self._model_instance.device, torch.bfloat16)
+
+        with torch.no_grad():
+            generated_ids = self._model_instance.generate(
+                **inputs,
+                do_sample=True,
+                temperature=0.6,
+                max_new_tokens=self.max_tokens,
+            )
+        generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+        output = self.processor.batch_decode(
+            generated_ids_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
+        return output[0] if output else ""
+
     async def _run_window_inference(self, frames):
         try:
             # Media is listed before text to match training inputs.
             content = [{"type": "image_url", "image_url": {"url": uri}} for _, uri in frames]
             content.append({"type": "text", "text": self.prompt})
+            messages = [{"role": "user", "content": content}]
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": content}],
-                max_tokens=self.max_tokens,
-                temperature=0.6,
-            )
+            loop = asyncio.get_event_loop()
+            text = await loop.run_in_executor(None, self._generate, messages)
 
-            message = response.choices[0].message
-            answer = THINK_TAG_RE.sub("", message.content or "").strip()
-            reasoning = getattr(message, "reasoning_content", None)
+            think_match = THINK_TAG_RE.search(text)
+            reasoning = think_match.group(1).strip() if think_match else None
+            answer = THINK_TAG_RE.sub("", text).strip()
 
             self.last_answer = answer
 
@@ -218,5 +274,6 @@ class CosmosProvider(VisionModel):
 
     async def close(self):
         log_info("Closing Cosmos provider")
-        self.client = None
+        self.processor = None
+        self._model_instance = None
         self.clear_overlay()
