@@ -4,7 +4,6 @@ import re
 
 from google import genai
 from google.genai import types as genai_types
-from PIL import ImageDraw
 from PIL.Image import Image
 
 from logger import log_info

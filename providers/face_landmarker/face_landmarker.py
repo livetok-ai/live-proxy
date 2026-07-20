@@ -3,7 +3,6 @@ import os
 import urllib.request
 
 import numpy as np
-from PIL import ImageDraw
 from PIL.Image import Image
 
 from logger import log_info

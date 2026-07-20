@@ -72,7 +72,7 @@ class InsivisionProvider(Model):
         try:
             if isinstance(input, str):
                 try:
-                    msg = json.loads(input)
+                    json.loads(input)
                     # if isinstance(msg, dict) and msg.get("type") in ("keydown", "keyup"):
                     #     log_info(f"Insivision key event: type={msg['type']} key={msg.get('key')} code={msg.get('code')}")
                 except (json.JSONDecodeError, TypeError):

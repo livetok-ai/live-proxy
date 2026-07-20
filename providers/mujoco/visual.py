@@ -7,9 +7,10 @@ import threading
 import time
 from typing import AsyncIterator
 
-import mujoco
 import numpy as np
 from av import VideoFrame
+
+import mujoco
 
 # Set headless GL backend before the renderer is created on Linux.
 if "MUJOCO_GL" not in os.environ and platform.system() == "Linux" and not os.environ.get("DISPLAY"):

@@ -17,10 +17,10 @@ from aioquic.h3.events import H3Event, HeadersReceived, WebTransportStreamDataRe
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
 
-from logger import log_info, log_warn
 from interfaces.webtransport.certs import certificate_hash_base64, generate_self_signed_cert
 from interfaces.webtransport.protocol import FRAME_TYPE_CONTROL, FrameDecoder
 from interfaces.webtransport.session import WebTransportPeerConnection
+from logger import log_info, log_warn
 
 RAW_QUIC_ALPN = "live-proxy-quic"
 

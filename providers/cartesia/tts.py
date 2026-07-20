@@ -5,6 +5,7 @@ import uuid
 from typing import AsyncIterator
 
 from av import AudioFrame
+
 from cartesia import AsyncCartesia
 
 # Add parent directories to path for imports

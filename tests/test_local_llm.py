@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from model import ModelEvents
 from providers.local_llm import LocalLLMProvider
 
 

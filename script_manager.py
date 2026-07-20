@@ -150,7 +150,7 @@ class JavaScriptScript:
                             if res.get("async"):
                                 result_id = res["resultId"]
                                 while True:
-                                    has_jobs = ctx.execute_pending_job()
+                                    ctx.execute_pending_job()
                                     status_str = ctx.eval(
                                         f"JSON.stringify(_tool_call_results[{json.dumps(result_id)}])"
                                     )

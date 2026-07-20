@@ -4,7 +4,6 @@ from typing import List
 
 import numpy as np
 import torch
-from PIL import ImageDraw
 from PIL.Image import Image
 
 # Check if easyocr is available
@@ -61,7 +60,7 @@ class OCRProvider(VisionModel):
         # Parse languages list (e.g. languages="en+es" or "en,fr")
         langs_str = kwargs.get("languages") or kwargs.get("langs") or "en"
         if isinstance(langs_str, str):
-            self.languages = [l.strip() for l in re.split(r"[+,|]", langs_str) if l.strip()]
+            self.languages = [lang.strip() for lang in re.split(r"[+,|]", langs_str) if lang.strip()]
         else:
             self.languages = list(langs_str) if langs_str else ["en"]
 

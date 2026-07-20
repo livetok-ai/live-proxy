@@ -160,15 +160,15 @@ def test_broadcast_sip_rtmp():
     conn_sip = Connection()
     conn_sip.pc = SimplePeerConnection()
 
-    info_logs = []
+    trace_logs = []
     warn_logs = []
-    conn_sip.info = lambda msg, *args: info_logs.append(msg % args if args else msg)
+    conn_sip.trace = lambda msg, *args: trace_logs.append(msg % args if args else msg)
     conn_sip.warn = lambda msg, *args: warn_logs.append(msg % args if args else msg)
 
     conn_sip._broadcast_to_channels("test-event-sip", publish=False)
     assert len(warn_logs) == 0
-    assert len(info_logs) == 1
-    assert "Event: test-event-sip" in info_logs[0]
+    assert len(trace_logs) == 1
+    assert "Event: test-event-sip" in trace_logs[0]
 
     # 2. RTMP connection
     class RTMPPeerConnection:
@@ -177,15 +177,15 @@ def test_broadcast_sip_rtmp():
     conn_rtmp = Connection()
     conn_rtmp.pc = RTMPPeerConnection()
 
-    info_logs_rtmp = []
+    trace_logs_rtmp = []
     warn_logs_rtmp = []
-    conn_rtmp.info = lambda msg, *args: info_logs_rtmp.append(msg % args if args else msg)
+    conn_rtmp.trace = lambda msg, *args: trace_logs_rtmp.append(msg % args if args else msg)
     conn_rtmp.warn = lambda msg, *args: warn_logs_rtmp.append(msg % args if args else msg)
 
     conn_rtmp._broadcast_to_channels("test-event-rtmp", publish=False)
     assert len(warn_logs_rtmp) == 0
-    assert len(info_logs_rtmp) == 1
-    assert "Event: test-event-rtmp" in info_logs_rtmp[0]
+    assert len(trace_logs_rtmp) == 1
+    assert "Event: test-event-rtmp" in trace_logs_rtmp[0]
 
     # 3. Regular Connection (WebRTC / WebTransport)
     class OtherConnection:
@@ -194,12 +194,12 @@ def test_broadcast_sip_rtmp():
     conn_other = Connection()
     conn_other.pc = OtherConnection()
 
-    info_logs_other = []
+    trace_logs_other = []
     warn_logs_other = []
-    conn_other.info = lambda msg, *args: info_logs_other.append(msg % args if args else msg)
+    conn_other.trace = lambda msg, *args: trace_logs_other.append(msg % args if args else msg)
     conn_other.warn = lambda msg, *args: warn_logs_other.append(msg % args if args else msg)
 
     conn_other._broadcast_to_channels("test-event-other", publish=False)
     assert len(warn_logs_other) == 1
     assert "Could not broadcast: no open data channels" in warn_logs_other[0]
-    assert len(info_logs_other) == 0
+    assert len(trace_logs_other) == 0

@@ -1,7 +1,5 @@
 import asyncio
 
-from PIL import Image as PILImage
-from PIL import ImageDraw
 from PIL.Image import Image
 from ultralytics import SAM
 

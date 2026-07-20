@@ -1,7 +1,6 @@
 import asyncio
 import os
 
-from PIL import ImageDraw
 from PIL.Image import Image
 from ultralytics import YOLO
 
@@ -78,7 +77,7 @@ class YoloProvider(VisionModel):
                             label = self.model.names[class_id]
                             detected.add(label)
                             if hasattr(b, "xyxy") and b.xyxy is not None:
-                                coords = b.xyxy[0].tolist()
+                                coords = [round(c, 2) for c in b.xyxy[0].tolist()]
                                 conf = float(b.conf[0]) if hasattr(b, "conf") and b.conf is not None else 1.0
                                 color = self.get_color(label)
                                 detected_Boxes.append({"coords": coords, "label": label, "conf": conf, "color": color})

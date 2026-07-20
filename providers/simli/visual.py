@@ -8,6 +8,7 @@ from typing import AsyncGenerator, AsyncIterator
 import numpy as np
 from av import AudioFrame, AudioResampler
 from dotenv import load_dotenv
+
 from simli import SimliClient, SimliConfig
 
 # Add parent directories to path for imports

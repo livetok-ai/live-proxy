@@ -54,12 +54,13 @@ try:
     from av import AudioFrame, VideoFrame
 
     import metrics
-    from logger import log_debug, log_info, log_warn
+    from logger import log_debug, log_info, log_trace, log_warn
     from model import Model, ModelEvents
 
     # install_playout_delay_extension(min_ms=0, max_ms=0)
     from port_range import get_sip_port_range, get_webrtc_port_range, restrict_ice_gathering_port_range
     from providers.cartesia import CartesiaProvider
+    from providers.cosmos import CosmosProvider
     from providers.face_landmarker import FaceLandmarkerProvider
     from providers.gemini import GeminiProvider
     from providers.gemini_robotics import GeminiRoboticsProvider
@@ -101,6 +102,7 @@ MODEL_MAP = {
     "insivision": InsivisionProvider,
     "mujoco": MujocoProvider,
     "gemini-robotics": GeminiRoboticsProvider,
+    "cosmos": CosmosProvider,
 }
 
 
@@ -188,7 +190,9 @@ def _reorder_video_codecs(sdp: str, preferred: str = PREFERRED_VIDEO_CODEC) -> s
             continue
         parts = line.split()
         pts = parts[3:]
-        preferred_pts = [pt for pt in pts if any(l.startswith(f"a=rtpmap:{pt} {preferred}/") for l in lines)]
+        preferred_pts = [
+            pt for pt in pts if any(sdp_line.startswith(f"a=rtpmap:{pt} {preferred}/") for sdp_line in lines)
+        ]
         other_pts = [pt for pt in pts if pt not in preferred_pts]
         lines[i] = " ".join(parts[:3] + preferred_pts + other_pts)
     return "\r\n".join(lines)
@@ -467,6 +471,9 @@ class Connection:
 
         asyncio.ensure_future(self._run())
 
+    def trace(self, msg, *args):
+        log_trace(msg, *args, context=self.id)
+
     def debug(self, msg, *args):
         log_debug(msg, *args, context=self.id)
 
@@ -523,7 +530,7 @@ class Connection:
                 if not m.supports_video:
                     asyncio.create_task(m.send(data))
         elif event_type == SessionEvents.MESSAGE:
-            print("Data received")
+            self.trace("Data received")
             self._broadcast_to_channels(data, publish=False)
             # Forward other participants' messages to the models so they can participate
             if source is not None and source.models:
@@ -639,7 +646,7 @@ class Connection:
         if not sent:
             pc_type = type(self.pc).__name__ if self.pc else None
             if pc_type in ("SimplePeerConnection", "RTMPPeerConnection"):
-                self.info(f"Event: {message}")
+                self.trace(f"Event: {message}")
             else:
                 self.warn("Could not broadcast: no open data channels")
 
