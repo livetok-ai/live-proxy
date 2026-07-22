@@ -132,17 +132,17 @@ function renderObjects(objects) {
       // overlay at the top of the video instead of drawing a box.
       if (!labelsContainer) return;
 
-      const color = getColorForLabel(label);
-
       const pill = document.createElement('span');
-      pill.style.backgroundColor = color;
-      pill.style.opacity = '0.85';
+      pill.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      pill.style.border = '1px solid white';
       pill.style.color = 'white';
       pill.style.fontSize = '12px';
       pill.style.fontWeight = 'bold';
       pill.style.padding = '4px 10px';
-      pill.style.borderRadius = '9999px';
-      pill.style.whiteSpace = 'nowrap';
+      pill.style.borderRadius = '10px';
+      pill.style.whiteSpace = 'normal';
+      pill.style.wordBreak = 'break-word';
+      pill.style.maxWidth = '100%';
       pill.textContent = label;
 
       labelsContainer.appendChild(pill);
