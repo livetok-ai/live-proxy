@@ -50,6 +50,7 @@ dependencies = [
     "mediapipe",
     "easyocr",
     "mujoco>=3.0.0",
+    "mcap>=1.4.0",
 ]
 
 
@@ -67,7 +68,7 @@ dev = [
 live-proxy = "proxy:main"
 
 [tool.setuptools]
-py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai"]
+py-modules = ["proxy", "api", "connection", "logger", "metrics", "model", "model_bedrock", "model_gemini", "model_openai", "recorder"]
 
 [tool.setuptools.packages.find]
 exclude = ["demo*", "deploy*", "tests*", "venv*"]

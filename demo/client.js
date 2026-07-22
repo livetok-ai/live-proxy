@@ -342,6 +342,7 @@ async function negotiate() {
   const language = document.getElementById('language').value;
   const apiKey = document.getElementById('api-key').value.trim();
   const ragCorpus = document.getElementById('rag-corpus').value.trim();
+  const recording = document.getElementById('recording')?.checked || false;
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
@@ -362,6 +363,7 @@ async function negotiate() {
       phone_number_id: '789',
       from: '101',
     },
+    recording: recording,
   };
 
   // Add API key if provided
