@@ -74,6 +74,7 @@ try:
     from providers.simli import SimliProvider
     from providers.text_sentiment import TextSentimentProvider
     from providers.yolo import YoloProvider
+    from recorder import create_recorder
     from rtp_extensions import install_playout_delay_extension  # noqa: F401
     from session import SessionEvents, SessionManager
 finally:
@@ -177,6 +178,24 @@ AUDIO_PTIME = 0.02
 AUDIO_BITRATE = 32000
 USE_VIDEO_BUFFER = False
 
+# Cap on audio/video frame queues so a stalled consumer (e.g. a paused peer
+# connection) can't build up unbounded memory/latency. 10 frames is close
+# enough to ~1s for both audio (20ms/frame) and typical video framerates,
+# and simpler than tracking wall-clock duration per queue.
+MAX_QUEUE_FRAMES = 10
+
+
+def _put_nowait_dropping_oldest(queue: "asyncio.Queue", item) -> None:
+    """Enqueue on a bounded queue, dropping the oldest frame to make room
+    instead of blocking or raising QueueFull, so queues stay bounded without
+    dropping the newest (most relevant) frame."""
+    if queue.full():
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    queue.put_nowait(item)
+
 
 def _reorder_video_codecs(sdp: str, preferred: str = PREFERRED_VIDEO_CODEC) -> str:
     """Move preferred video codec payload types to the front of every m=video line.
@@ -226,7 +245,7 @@ class SendingTrack(MediaStreamTrack):
     def __init__(self, kind="audio", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.kind = kind
-        self.queue = asyncio.Queue()
+        self.queue = asyncio.Queue(maxsize=MAX_QUEUE_FRAMES)
         self._video_pts = 0
         self._video_last_time: Optional[float] = None
 
@@ -243,8 +262,9 @@ class SendingTrack(MediaStreamTrack):
 
 
 class Connection:
-    def __init__(self, closed=None, tool_call=None, public_ip=None):
+    def __init__(self, closed=None, tool_call=None, public_ip=None, recording=False):
         self.id = str(uuid.uuid4())
+        self.recorder = create_recorder(recording, self.id)
         self.recv_audio_track = None
         self.recv_video_track = None
         self.send_audio_track = None
@@ -258,7 +278,7 @@ class Connection:
         self.last_message_time = None
         self.start_time = None
         self.transcript = []
-        self.output_audio_queue = asyncio.Queue()
+        self.output_audio_queue = asyncio.Queue(maxsize=MAX_QUEUE_FRAMES)
         self.connected = False
         self.closed = closed
         self.tool_call = tool_call
@@ -522,9 +542,9 @@ class Connection:
         """Receive an event published to the session by another connection."""
         if event_type == SessionEvents.VIDEO:
             if self.send_video_track:
-                self.send_video_track.queue.put_nowait(data)
+                _put_nowait_dropping_oldest(self.send_video_track.queue, data)
         elif event_type == SessionEvents.AUDIO:
-            self.output_audio_queue.put_nowait(data)
+            _put_nowait_dropping_oldest(self.output_audio_queue, data)
             # Let the models hear the other participants too
             for m in self.models:
                 if not m.supports_video:
@@ -690,18 +710,18 @@ class Connection:
                         if self.first_video_frame:
                             self.first_video_frame = False
                             self._broadcast_to_channels(json.dumps({"type": "video_started"}))
-                        self.send_video_track.queue.put_nowait(frame)
+                        _put_nowait_dropping_oldest(self.send_video_track.queue, frame)
                 elif isinstance(frame, AudioFrame):
                     if model == avatar_model:
                         self._publish_to_session(SessionEvents.AUDIO, frame)
                         if self.send_audio_track:
-                            self.send_audio_track.queue.put_nowait(frame)
+                            _put_nowait_dropping_oldest(self.send_audio_track.queue, frame)
                     else:
                         if avatar_model:
                             asyncio.create_task(avatar_model.send_audio(frame))
                         else:
                             self._publish_to_session(SessionEvents.AUDIO, frame)
-                            self.output_audio_queue.put_nowait(frame)
+                            _put_nowait_dropping_oldest(self.output_audio_queue, frame)
         except Exception as e:
             self.info("Error receiving from %s: %s", model, e)
 
@@ -829,6 +849,11 @@ class Connection:
                     # Ignore first 3 seconds of audio because in some platforms (iOS) looks like there is a bug and sends some noise
                     if time.time() - start_time < 3:
                         continue
+                    if self.recorder:
+                        try:
+                            self.recorder.add_audio_frame(frame)
+                        except Exception as e:
+                            self.info("Error recording audio frame: %s", e)
                     if self._session_has_subscribers():
                         self._publish_to_session(SessionEvents.AUDIO, _to_mono(frame))
                     for m in self.models:
@@ -844,6 +869,11 @@ class Connection:
                 try:
                     frame = await self.recv_video_track.recv()
                     self.last_message_time = time.time()
+                    if self.recorder:
+                        try:
+                            self.recorder.add_video_frame(frame)
+                        except Exception as e:
+                            self.info("Error recording video frame: %s", e)
                     self._publish_to_session(SessionEvents.VIDEO, frame)
                     has_active_video_models = any(m.supports_video for m in self.models)
                     if not has_active_video_models:
@@ -896,7 +926,7 @@ class Connection:
 
                     video_session = next((m for m in self.models if hasattr(m, "send_audio")), None)
                     if not video_session and self.send_audio_track:
-                        self.send_audio_track.queue.put_nowait(audio_frame)
+                        _put_nowait_dropping_oldest(self.send_audio_track.queue, audio_frame)
 
                 # Calculate how much time to sleep to maintain AUDIO_PTIME interval
                 sleep_time = next_send_time - time.time()
@@ -971,6 +1001,13 @@ class Connection:
         if recv_tasks:
             await asyncio.gather(*recv_tasks, return_exceptions=True)
 
+        if self.recorder:
+            try:
+                self.recorder.close()
+            except Exception as e:
+                self.info("Error closing recorder: %s", e)
+            self.recorder = None
+
     @property
     def data_channel(self):
         return self._data_channel
@@ -1010,11 +1047,13 @@ class ConnectionManager:
         self._closed_callback = closed_callback
         self._tool_call_callback = tool_call_callback
 
-    def create_connection(self, callback=None, metadata=None, public_ip=None, session=None):
+    def create_connection(self, callback=None, metadata=None, public_ip=None, session=None, recording=False):
         """Create a new connection and add it to the manager.
 
         The connection is attached to the given session, or to a newly created
-        one when no session is provided."""
+        one when no session is provided. `recording` mirrors Connection's
+        `recording` parameter: falsy disables recording, True/"file" records
+        to .mp4, "mcap" records to .mcap."""
 
         def on_connection_closed(connection):
             # Find and remove the connection info
@@ -1039,7 +1078,9 @@ class ConnectionManager:
                 return await self._tool_call_callback(conn_info, tool_name, tool_id, parameters, tools)
             return {"error": "Tool calling not configured"}
 
-        connection = Connection(closed=on_connection_closed, tool_call=tool_call_wrapper, public_ip=public_ip)
+        connection = Connection(
+            closed=on_connection_closed, tool_call=tool_call_wrapper, public_ip=public_ip, recording=recording
+        )
         conn_info = ConnectionInfo(connection=connection, callback=callback, metadata=metadata)
         self.connections.add(conn_info)
 

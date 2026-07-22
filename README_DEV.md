@@ -95,7 +95,7 @@ pytest tests/test_proxy.py::test_basic_import -v
 ├── session.py                # Session manager (multiple connections per session)
 ├── logger.py                  # Logging utilities
 ├── metrics.py                  # Prometheus metrics
-├── interfaces/                  # Non-WebRTC transports: rtmp/, sip/, webtransport/
+├── interfaces/                  # Non-WebRTC transports: rtmp/, sip/, webtransport/, websocket/
 ├── providers/                    # One subdirectory per AI model (gemini/, openai/, yolo/, ...)
 ├── demo/                          # Browser demo pages
 └── tests/                          # Test suite

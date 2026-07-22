@@ -25,9 +25,10 @@ from logger import log_info, log_warn
 RAW_QUIC_ALPN = "live-proxy-quic"
 
 
-async def _run_media_session(send_bytes: Callable[[bytes], None], recv_chunk, on_session):
-    """Shared bootstrap for both transports: wait for the init control frame,
-    build the Connection from its JSON payload, then keep feeding frames."""
+async def run_media_session(send_bytes: Callable[[bytes], None], recv_chunk, on_session):
+    """Shared bootstrap for any framed transport (WebTransport, raw QUIC, WebSocket):
+    wait for the init control frame, build the Connection from its JSON payload,
+    then keep feeding frames."""
     decoder = FrameDecoder()
     pc: Optional[WebTransportPeerConnection] = None
 
@@ -105,7 +106,7 @@ class QuicMediaProtocol(QuicConnectionProtocol):
 
             self._session_tasks[session_id] = {
                 "queue": queue,
-                "task": asyncio.ensure_future(_run_media_session(send_bytes, recv_chunk, self._on_session)),
+                "task": asyncio.ensure_future(run_media_session(send_bytes, recv_chunk, self._on_session)),
             }
 
         self._session_tasks[session_id]["queue"].put_nowait(data)
@@ -116,7 +117,7 @@ async def _raw_quic_stream_handler(on_session, reader: asyncio.StreamReader, wri
         return await reader.read(65536)
 
     try:
-        await _run_media_session(writer.write, recv_chunk, on_session)
+        await run_media_session(writer.write, recv_chunk, on_session)
     finally:
         writer.close()
 

@@ -41,6 +41,7 @@ from connection import ConnectionManager
 from interfaces.rtmp import RTMPServer
 from interfaces.sip import SIPServer
 from interfaces.webtransport import WebTransportServer
+from interfaces.websocket import WebSocketServer
 from logger import log_info, log_warn
 from session import SessionManager
 
@@ -51,6 +52,7 @@ def in_venv():
 
 connections = ConnectionManager()
 webtransport_server: "WebTransportServer | None" = None
+websocket_server: "WebSocketServer | None" = None
 
 
 class HTTPServer:
@@ -70,6 +72,7 @@ class HTTPServer:
         self.app.router.add_post("/session/{session_id}/connection", self.create_session_connection)
         self.app.router.add_get("/metrics", self.metrics_endpoint)
         self.app.router.add_get("/webtransport-info", self.webtransport_info)
+        self.app.router.add_get("/websocket-info", self.websocket_info)
         self.app.router.add_static("/demo", os.path.join(os.path.dirname(__file__), "demo"))
 
     async def _on_shutdown(self, app):
@@ -99,6 +102,7 @@ class HTTPServer:
             "model",
             "api_key",
             "script",
+            "recording",
         ]
         return {key: body.get(key) for key in keys}
 
@@ -127,7 +131,9 @@ class HTTPServer:
         )
 
         # Create and start connection using ConnectionManager
-        conn_info = connections.create_connection(callback=params["callback"], metadata=params["metadata"])
+        conn_info = connections.create_connection(
+            callback=params["callback"], metadata=params["metadata"], recording=params["recording"]
+        )
 
         try:
             sdp_response = await conn_info.connection.start(
@@ -273,6 +279,20 @@ class HTTPServer:
             ),
         )
 
+    async def websocket_info(self, request):
+        """Connection info for the WebSocket demo page (port + whether it's using TLS)."""
+        if not websocket_server:
+            raise web.HTTPNotFound(text="WebSocket server not running")
+        return web.Response(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "port": websocket_server.port,
+                    "secure": websocket_server.secure,
+                }
+            ),
+        )
+
 
 def _on_connection_closed(conn_info):
     """Callback invoked when a connection is closed."""
@@ -381,6 +401,28 @@ async def _on_webtransport_session(pc, params):
         raise
 
 
+async def _on_websocket_session(pc, params):
+    """Called once a WebSocket session sends its init control message
+    (JSON with the same fields as the HTTP /connection body, minus 'sdp')."""
+    log_info(f"WebSocket session starting model={params.get('model')} metadata={params.get('metadata')}")
+
+    conn_info = connections.create_connection(callback=params.get("callback"), metadata=params.get("metadata"))
+    try:
+        await conn_info.connection.start_webtransport(
+            pc,
+            model=params.get("model"),
+            system_instructions=params.get("system_instructions"),
+            tools=params.get("tools"),
+            voice=params.get("voice"),
+            language=params.get("language"),
+            api_key=params.get("api_key"),
+            script=params.get("script"),
+        )
+    except Exception:
+        connections.remove_connection(conn_info)
+        raise
+
+
 async def _on_rtmp_session(pc, params):
     """Called once an RTMP client starts publishing (params parsed from the stream key query string)."""
     log_info(f"RTMP session starting model={params.get('model')} metadata={params.get('metadata')}")
@@ -426,16 +468,19 @@ async def run_servers(
     wt_host,
     wt_port,
     wt_ssl_context,
+    ws_host,
+    ws_port,
+    ws_ssl_context,
     rtmp_host,
     rtmp_port,
     rtmp_callback_url,
     setup=False,
 ):
-    """Run the web app, SIP server, WebTransport/QUIC server and RTMP server concurrently."""
+    """Run the web app, SIP server, WebTransport/QUIC server, WebSocket server and RTMP server concurrently."""
     if setup:
         await setup_all_providers()
 
-    global webtransport_server
+    global webtransport_server, websocket_server
 
     http_server = HTTPServer(host=host, port=port, ssl_context=ssl_context)
     sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)
@@ -446,6 +491,12 @@ async def run_servers(
         certificate=wt_ssl_context[0] if wt_ssl_context else None,
         private_key=wt_ssl_context[1] if wt_ssl_context else None,
     )
+    websocket_server = WebSocketServer(
+        host=ws_host,
+        port=ws_port,
+        on_session=_on_websocket_session,
+        ssl_context=ws_ssl_context,
+    )
 
     rtmp_server = RTMPServer(
         host=rtmp_host, port=rtmp_port, on_session=_on_rtmp_session, callback_url=rtmp_callback_url
@@ -455,9 +506,16 @@ async def run_servers(
     try:
         await sip_server.bind()
         await webtransport_server.bind()
+        await websocket_server.bind()
         await rtmp_server.bind()
         # Wait for all to complete (or until one fails)
-        await asyncio.gather(http_server.start(), sip_server.start(), webtransport_server.start(), rtmp_server.start())
+        await asyncio.gather(
+            http_server.start(),
+            sip_server.start(),
+            webtransport_server.start(),
+            websocket_server.start(),
+            rtmp_server.start(),
+        )
     except Exception as e:
         log_info(f"Error running servers: {e}")
         raise
@@ -479,6 +537,10 @@ if __name__ == "__main__":
     parser.add_argument("--wt-port", type=int, default=4433)
     parser.add_argument("--wt-cert-file")
     parser.add_argument("--wt-key-file")
+    parser.add_argument("--ws-host", default="0.0.0.0")
+    parser.add_argument("--ws-port", type=int, default=8765)
+    parser.add_argument("--ws-cert-file")
+    parser.add_argument("--ws-key-file")
     parser.add_argument("--rtmp-host", default="0.0.0.0")
     parser.add_argument("--rtmp-port", type=int, default=1935)
     parser.add_argument("--rtmp-callback-url", default=os.getenv("RTMP_CALLBACK_URL"))
@@ -517,6 +579,11 @@ if __name__ == "__main__":
             wt_private_key = load_pem_private_key(f.read(), password=None)
         wt_ssl_context = (wt_certificate, wt_private_key)
 
+    ws_ssl_context = None
+    if args.ws_cert_file:
+        ws_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ws_ssl_context.load_cert_chain(args.ws_cert_file, args.ws_key_file)
+
     # Load all scripts from scripts folder
     from script_manager import load_all_scripts
 
@@ -533,6 +600,9 @@ if __name__ == "__main__":
             args.wt_host,
             args.wt_port,
             wt_ssl_context,
+            args.ws_host,
+            args.ws_port,
+            ws_ssl_context,
             args.rtmp_host,
             args.rtmp_port,
             args.rtmp_callback_url,

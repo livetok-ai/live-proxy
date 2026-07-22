@@ -1,4 +1,5 @@
-"""Binary framing for audio/video/control messages sent over a WebTransport or raw QUIC stream.
+"""Binary framing for audio/video/control messages sent over a WebTransport, raw QUIC or
+WebSocket connection.
 
 Each message is length-prefixed so it can be parsed out of a byte stream:
 

@@ -2,11 +2,11 @@
 
 # Live-Proxy
 
-Live-Proxy is an open-source proxy that bridges real-time audio/video protocols — **WebRTC**, **SIP**, **RTMP**, and **WebTransport/raw QUIC** — to AI models exposed over WebSocket, streaming, or request/response APIs (LLMs, speech, vision, and simulation models). It lets a phone call, an RTMP stream from OBS/ffmpeg, or a browser peer connection talk directly to a model without the client having to speak that model's native API, and it exposes an **HTTP control interface** to create, update, and tear down those sessions programmatically.
+Live-Proxy is an open-source proxy that bridges real-time audio/video protocols — **WebRTC**, **SIP**, **RTMP**, **WebTransport/raw QUIC**, and **WebSocket** — to AI models exposed over WebSocket, streaming, or request/response APIs (LLMs, speech, vision, and simulation models). It lets a phone call, an RTMP stream from OBS/ffmpeg, or a browser peer connection talk directly to a model without the client having to speak that model's native API, and it exposes an **HTTP control interface** to create, update, and tear down those sessions programmatically.
 
 ## How it works
 
-- **Interfaces** (`interfaces/`) accept media from the outside world and normalize it into a connection: `webrtc` (via `connection.py`), `sip`, `rtmp`, and `webtransport` (HTTP/3 WebTransport + raw QUIC).
+- **Interfaces** (`interfaces/`) accept media from the outside world and normalize it into a connection: `webrtc` (via `connection.py`), `sip`, `rtmp`, `webtransport` (HTTP/3 WebTransport + raw QUIC), and `websocket`.
 - **Providers** (`providers/`) wrap each AI model behind a common `Model` interface (`model.py`) with `send`/`recv` for streaming audio, video, and text, plus event hooks for transcriptions, interruptions, and detections.
 - **The HTTP API** (`proxy.py`) lets a backend service create a connection (choosing the interface and model), update it mid-call, list active sessions, and tear it down — see [HTTP control interface](#http-control-interface) below.
 
@@ -154,6 +154,18 @@ self-signed certificate — the page fetches its SHA-256 hash from `GET /webtran
 `serverCertificateHashes`). Pass `--wt-cert-file`/`--wt-key-file` to use a real certificate instead. Raw QUIC can't
 be driven from a browser (no raw socket API); see `tests/test_webtransport.py` for a scripted client example.
 
+### WebSocket Integration
+
+The proxy also runs a plain WebSocket server (default TCP port `8765`, override with `--ws-port`), for clients
+that can't use WebTransport/QUIC. It reuses the exact same length-prefixed binary framing described above
+(see `interfaces/webtransport/protocol.py`) over a single WebSocket connection instead of a QUIC stream — a
+client sends the same init control frame with connection parameters, then audio/video/control frames as
+WebSocket binary messages.
+
+Try it live at `http://localhost:8080/demo/websocket.html` (the page fetches the port from
+`GET /websocket-info`). Pass `--ws-cert-file`/`--ws-key-file` to serve over `wss://` with a real certificate
+instead of plain `ws://`.
+
 ## HTTP control interface
 
 Every session, regardless of which media interface it came in on, can be managed over plain HTTP from a backend service:
@@ -167,8 +179,9 @@ Every session, regardless of which media interface it came in on, can be managed
 | `POST` | `/session/{session_id}/connection` | Create a connection within an existing session. |
 | `GET` | `/metrics` | Prometheus metrics. |
 | `GET` | `/webtransport-info` | Fetch the server's ephemeral WebTransport certificate hash for pinning. |
+| `GET` | `/websocket-info` | Fetch the WebSocket server's port and whether it's using TLS. |
 
-The same connection parameters (`model`, `system_instructions`, `tools`, `voice`, `language`, `api_key`, `metadata`, ...) are shared across the HTTP, RTMP, and WebTransport entry points, so switching a client from one transport to another doesn't change how a session is configured.
+The same connection parameters (`model`, `system_instructions`, `tools`, `voice`, `language`, `api_key`, `metadata`, ...) are shared across the HTTP, RTMP, WebTransport, and WebSocket entry points, so switching a client from one transport to another doesn't change how a session is configured.
 
 ## Models supported
 
@@ -200,6 +213,7 @@ Each provider declares which of `supports_audio`, `supports_video`, and `support
 - ✅ **SIP interface** - Session Initiation Protocol support for telephony integration
 - ✅ **RTMP interface** - Ingest from RTMP publishers (OBS, ffmpeg, ...)
 - ✅ **WebTransport interface** - HTTP/3 WebTransport and raw QUIC support
+- ✅ **WebSocket interface** - Plain WebSocket transport using the same binary framing as WebTransport/raw QUIC
 - ✅ **HTTP control interface** - Create, update, list, and tear down sessions from a backend service
 - ✅ **Audio support** - Bidirectional audio streaming
 - ✅ **Video support** - Video streaming capabilities
