@@ -72,8 +72,10 @@ class FileRecorder(Recorder):
         if self._video_stream is None:
             self._video_stream = cast(VideoStream, self._container.add_stream("libx264", rate=30))
             self._video_stream.pix_fmt = "yuv420p"
-            self._video_stream.width = frame.width
-            self._video_stream.height = frame.height
+            # yuv420p needs even dimensions; odd sizes make libx264 fail to
+            # open with EINVAL on every subsequent encode() call.
+            self._video_stream.width = frame.width - (frame.width % 2)
+            self._video_stream.height = frame.height - (frame.height % 2)
         for packet in self._video_stream.encode(frame):
             self._container.mux(packet)
 

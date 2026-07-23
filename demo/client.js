@@ -9,9 +9,159 @@ var heartbeatInterval = null;
 var lastMessageElement = null; // Track the last message bubble element
 var isAppendingToLast = false; // Track if we're appending to the last message
 
+// Which transport is currently connected: 'webrtc' | 'websocket' | 'webtransport' | null
+var activeTransport = null;
+
+// WebSocket transport state
+var socket = null;
+
+// WebTransport transport state
+var wtTransport = null;
+var wtWriter = null;
+var wtReader = null;
+
+// Shared media capture/playback state (websocket & webtransport transports)
+var mediaStream = null;
+var streamAudioContext = null;
+var playbackContext = null;
+var nextPlaybackTime = 0;
+var videoSendInterval = null;
+
 // Read from query params
 const urlParams = new URLSearchParams(window.location.search);
 const BASE_URL = urlParams.get('base_url') || '';
+
+// --- Transport selection helpers -------------------------------------------
+
+function getTransport() {
+  const el = document.getElementById('transport');
+  return (el && el.value) || 'webrtc';
+}
+
+function disableTransportSelect(disabled) {
+  const el = document.getElementById('transport');
+  if (el) el.disabled = disabled;
+}
+
+function resolveHost() {
+  try {
+    return new URL(BASE_URL || window.location.href, window.location.href).hostname;
+  } catch (e) {
+    return window.location.hostname;
+  }
+}
+
+function setConnectionStatus(text) {
+  if (iceConnectionLog) iceConnectionLog.textContent = text;
+}
+
+function setVideoDisplayMode(transport) {
+  const videoEl = document.getElementById('video');
+  const canvasEl = document.getElementById('remote-canvas');
+  if (videoEl) videoEl.classList.toggle('hidden', transport !== 'webrtc');
+  if (canvasEl) canvasEl.classList.toggle('hidden', transport === 'webrtc');
+}
+
+function resetConversationLog() {
+  lastMessageElement = null;
+  isAppendingToLast = false;
+  if (dataChannelLog) dataChannelLog.innerHTML = '';
+}
+
+// --- Binary frame protocol (mirrors interfaces/webtransport/protocol.py) --
+// Shared by the WebSocket and WebTransport transports: [4B length][1B type][8B timestamp_us][extra][payload]
+
+const FRAME_TYPE_AUDIO = 1;
+const FRAME_TYPE_VIDEO = 2;
+const FRAME_TYPE_CONTROL = 3;
+
+const STREAMING_AUDIO_SAMPLE_RATE = 16000;
+const STREAMING_VIDEO_FPS = 8;
+
+function packFrame(type, timestampUs, extra, payload) {
+  const header = new Uint8Array(1 + 8 + extra.length);
+  header[0] = type;
+  // 8-byte big-endian timestamp (safe for the range we use here)
+  const hi = Math.floor(timestampUs / 2 ** 32);
+  const lo = timestampUs >>> 0;
+  new DataView(header.buffer).setUint32(1, hi);
+  new DataView(header.buffer).setUint32(5, lo);
+  header.set(extra, 9);
+
+  const body = new Uint8Array(header.length + payload.length);
+  body.set(header, 0);
+  body.set(payload, header.length);
+
+  const out = new Uint8Array(4 + body.length);
+  new DataView(out.buffer).setUint32(0, body.length);
+  out.set(body, 4);
+  return out;
+}
+
+function packAudio(pcm16, sampleRate, channels, timestampUs) {
+  const extra = new Uint8Array(5);
+  const dv = new DataView(extra.buffer);
+  dv.setUint32(0, sampleRate);
+  dv.setUint8(4, channels);
+  return packFrame(FRAME_TYPE_AUDIO, timestampUs, extra, new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength));
+}
+
+function packVideo(jpegBytes, timestampUs, keyframe = true) {
+  const extra = new Uint8Array([keyframe ? 1 : 0]);
+  return packFrame(FRAME_TYPE_VIDEO, timestampUs, extra, jpegBytes);
+}
+
+function packControl(jsonObj) {
+  const payload = new TextEncoder().encode(JSON.stringify(jsonObj));
+  return packFrame(FRAME_TYPE_CONTROL, 0, new Uint8Array(0), payload);
+}
+
+class FrameDecoder {
+  constructor() {
+    this._buffer = new Uint8Array(0);
+  }
+
+  feed(chunk) {
+    const merged = new Uint8Array(this._buffer.length + chunk.length);
+    merged.set(this._buffer, 0);
+    merged.set(chunk, this._buffer.length);
+    this._buffer = merged;
+
+    const frames = [];
+    while (true) {
+      if (this._buffer.length < 4) break;
+      const length = new DataView(this._buffer.buffer, this._buffer.byteOffset).getUint32(0);
+      if (this._buffer.length < 4 + length) break;
+      const body = this._buffer.slice(4, 4 + length);
+      this._buffer = this._buffer.slice(4 + length);
+      frames.push(this._parse(body));
+    }
+    return frames;
+  }
+
+  _parse(body) {
+    const dv = new DataView(body.buffer, body.byteOffset);
+    const type = dv.getUint8(0);
+    const timestampUs = Number(dv.getBigUint64(1));
+    let offset = 9;
+    let extra = {};
+    if (type === FRAME_TYPE_AUDIO) {
+      extra = { sampleRate: dv.getUint32(offset), channels: dv.getUint8(offset + 4) };
+      offset += 5;
+    } else if (type === FRAME_TYPE_VIDEO) {
+      extra = { keyframe: !!(dv.getUint8(offset) & 1) };
+      offset += 1;
+    }
+    return { type, timestampUs, extra, payload: body.slice(offset) };
+  }
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
 
 // Function to add or append message to chat bubbles
 function addOrAppendMessage(messageType, content) {
@@ -186,6 +336,36 @@ function renderObjects(objects) {
   });
 }
 
+// Handle a parsed control/data-channel JSON payload. This is the single
+// place that reacts to server messages, shared across all three transports.
+function processControlPayload(data) {
+  if (!data || typeof data !== 'object') return;
+
+  // Show on top of the video feed any data received that has a "display" attribute
+  if ('display' in data) {
+    const overlay = document.getElementById('video-overlay');
+    if (overlay) {
+      if (data.display !== null && data.display !== undefined && String(data.display).trim() !== '') {
+        overlay.textContent = data.display;
+        overlay.classList.remove('hidden');
+      } else {
+        overlay.textContent = '';
+        overlay.classList.add('hidden');
+      }
+    }
+  }
+
+  if (data.type === 'transcription') {
+    addOrAppendMessage(data.role, data.content);
+  } else if (data.type === 'inference') {
+    // Latest raw inference result for a processed frame — replaces
+    // whatever was previously shown, it is not appended.
+    updateInferenceStatus(data.provider, data.content);
+  } else if (data.type === 'objects') {
+    renderObjects(data.objects);
+  }
+}
+
 function handleDataChannelMessage(evt) {
   const message = evt.data;
 
@@ -194,35 +374,7 @@ function handleDataChannelMessage(evt) {
   try {
     // Try to parse as JSON
     const data = JSON.parse(message);
-
-    // Show on top of the video feed any data received that has a "display" attribute
-    if (data && typeof data === 'object' && 'display' in data) {
-      const overlay = document.getElementById('video-overlay');
-      if (overlay) {
-        if (data.display !== null && data.display !== undefined && String(data.display).trim() !== '') {
-          overlay.textContent = data.display;
-          overlay.classList.remove('hidden');
-        } else {
-          overlay.textContent = '';
-          overlay.classList.add('hidden');
-        }
-      }
-    }
-
-    if (data.type === 'transcription') {
-      const currentMessageType = data.role; // 'user' or 'model'
-      const content = data.content;
-
-      addOrAppendMessage(currentMessageType, content);
-    } else if (data.type === 'inference') {
-      // Latest raw inference result for a processed frame — replaces
-      // whatever was previously shown, it is not appended.
-      updateInferenceStatus(data.provider, data.content);
-    } else if (data.type === 'objects') {
-      renderObjects(data.objects);
-    } else {
-      // Handle other JSON message types if needed - ignore for now
-    }
+    processControlPayload(data);
   } catch (e) {
     // Fallback for non-JSON messages (backwards compatibility)
     const currentMessageType = message.startsWith('<') ? 'model' : message.startsWith('>') ? 'user' : null;
@@ -233,6 +385,78 @@ function handleDataChannelMessage(evt) {
       addOrAppendMessage(currentMessageType, content);
     }
     // Ignore other non-JSON messages
+  }
+}
+
+function handleControlFrame(frame) {
+  try {
+    const data = JSON.parse(new TextDecoder().decode(frame.payload));
+    processControlPayload(data);
+  } catch (e) {
+    console.log('[control] non-JSON payload:', new TextDecoder().decode(frame.payload));
+  }
+}
+
+function handleIncomingFrame(frame) {
+  if (frame.type === FRAME_TYPE_AUDIO) playAudioFrame(frame);
+  else if (frame.type === FRAME_TYPE_VIDEO) showVideoFrame(frame);
+  else if (frame.type === FRAME_TYPE_CONTROL) handleControlFrame(frame);
+}
+
+function playAudioFrame(frame) {
+  if (!playbackContext) {
+    playbackContext = new AudioContext();
+    nextPlaybackTime = playbackContext.currentTime;
+  }
+  const sampleRate = frame.extra.sampleRate || 48000;
+  const pcm16 = new Int16Array(frame.payload.buffer, frame.payload.byteOffset, frame.payload.length / 2);
+  const buffer = playbackContext.createBuffer(1, pcm16.length, sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < pcm16.length; i++) channel[i] = pcm16[i] / 32768;
+
+  const src = playbackContext.createBufferSource();
+  src.buffer = buffer;
+  src.connect(playbackContext.destination);
+  nextPlaybackTime = Math.max(nextPlaybackTime, playbackContext.currentTime);
+  src.start(nextPlaybackTime);
+  nextPlaybackTime += buffer.duration;
+}
+
+async function showVideoFrame(frame) {
+  const canvas = document.getElementById('remote-canvas');
+  if (!canvas) return;
+
+  const blob = new Blob([frame.payload], { type: 'image/jpeg' });
+  const bitmap = await createImageBitmap(blob);
+  if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+  }
+  canvas.getContext('2d').drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  const mediaDiv = document.getElementById('media');
+  if (mediaDiv) mediaDiv.style.display = 'block';
+}
+
+// Generic "send a control message to the server" used for both the
+// WebRTC unreliable data channel and the WebSocket/WebTransport control frame.
+function sendControlMessage(obj) {
+  if (activeTransport === 'webrtc') {
+    const ch = dcUnreliable && dcUnreliable.readyState === 'open' ? dcUnreliable : dc;
+    if (!ch || ch.readyState !== 'open') return;
+    sendDataChannelMessage(ch, JSON.stringify(obj));
+  } else if (activeTransport === 'websocket' || activeTransport === 'webtransport') {
+    sendFrame(packControl(obj)).catch(() => { });
+  }
+}
+
+// Send raw framed bytes over whichever streaming transport (websocket/webtransport) is active.
+async function sendFrame(bytes) {
+  if (activeTransport === 'websocket') {
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(bytes);
+  } else if (activeTransport === 'webtransport') {
+    if (wtWriter) await wtWriter.write(bytes);
   }
 }
 
@@ -293,7 +517,10 @@ function enumerateInputDevices() {
   });
 }
 
-async function negotiate() {
+// Build the session/model configuration shared by all three transports
+// (WebRTC sends it alongside the SDP offer; WebSocket/WebTransport send it
+// as the first control frame).
+function buildSessionParams() {
   const modelValue = document.getElementById('model').value;
   let model = modelValue === 'none' ? '' : modelValue;
 
@@ -327,8 +554,8 @@ async function negotiate() {
   if (document.getElementById('provider-gemini-robotics')?.checked) {
     appendAddon(`gemini-robotics[draw=false,sampling=${sampling}]`);
   }
-  if (document.getElementById('provider-insivision')?.checked) {
-    appendAddon('insivision');
+  if (document.getElementById('provider-external-websocket')?.checked) {
+    appendAddon('external_websocket');
   }
   if (document.getElementById('provider-mujoco')?.checked) {
     appendAddon('mujoco');
@@ -336,6 +563,7 @@ async function negotiate() {
   if (document.getElementById('provider-cosmos')?.checked) {
     appendAddon(`cosmos[sampling=${sampling}]`);
   }
+
   const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
@@ -343,15 +571,8 @@ async function negotiate() {
   const apiKey = document.getElementById('api-key').value.trim();
   const ragCorpus = document.getElementById('rag-corpus').value.trim();
   const recording = document.getElementById('recording')?.checked || false;
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
 
-  let requestBody;
-  let contentType;
-
-  // Send JSON body with SDP and optional parameters
-  const body = {
-    sdp: offer.sdp,
+  const params = {
     system_instructions: systemInstructions,
     tools: tools,
     voice: voice,
@@ -366,27 +587,26 @@ async function negotiate() {
     recording: recording,
   };
 
-  // Add API key if provided
-  if (apiKey) {
-    body.api_key = apiKey;
-  }
+  if (apiKey) params.api_key = apiKey;
+  if (ragCorpus) params.rag_corpus = ragCorpus;
 
-  // Add RAG corpus if provided
-  if (ragCorpus) {
-    body.rag_corpus = ragCorpus;
-  }
+  return params;
+}
 
-  requestBody = JSON.stringify(body);
-  contentType = 'application/json';
+async function negotiate() {
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const body = Object.assign({ sdp: offer.sdp }, buildSessionParams());
 
   let response;
   let result;
 
   try {
     response = await fetch(`${BASE_URL}/connection`, {
-      body: requestBody,
+      body: JSON.stringify(body),
       headers: {
-        'Content-Type': contentType
+        'Content-Type': 'application/json'
       },
       method: 'POST'
     });
@@ -418,14 +638,88 @@ async function negotiate() {
   await pc.setRemoteDescription(answer);
 }
 
-async function start() {
-  const startBtn = document.getElementById('start');
-  if (startBtn) startBtn.style.display = 'none';
+// --- Media capture shared by the WebSocket & WebTransport transports -------
+// (WebRTC captures/sends tracks directly through RTCPeerConnection instead.)
 
-  // Reset transcription tracking and clear log
-  lastMessageElement = null;
-  isAppendingToLast = false;
-  if (dataChannelLog) dataChannelLog.innerHTML = '';
+async function startStreamingMedia() {
+  const useAudio = document.getElementById('use-audio')?.checked || false;
+  const sendVideo = document.getElementById('send-video')?.checked || false;
+
+  const constraints = { audio: false, video: false };
+
+  if (useAudio) {
+    const audioConstraints = {};
+    const device = document.getElementById('audio-input')?.value;
+    if (device) audioConstraints.deviceId = { exact: device };
+    constraints.audio = Object.keys(audioConstraints).length ? audioConstraints : true;
+  }
+
+  if (sendVideo) {
+    const videoConstraints = { width: { max: 320 }, height: { max: 240 } };
+    const device = document.getElementById('video-input')?.value;
+    if (device) videoConstraints.deviceId = { exact: device };
+    constraints.video = videoConstraints;
+  }
+
+  if (!constraints.audio && !constraints.video) return;
+
+  mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+  if (constraints.audio) startStreamingAudioCapture(mediaStream);
+  if (constraints.video) startStreamingVideoCapture(mediaStream);
+}
+
+function startStreamingAudioCapture(stream) {
+  streamAudioContext = new AudioContext();
+  const source = streamAudioContext.createMediaStreamSource(stream);
+  const processor = streamAudioContext.createScriptProcessor(2048, 1, 1);
+  const ratio = STREAMING_AUDIO_SAMPLE_RATE / streamAudioContext.sampleRate;
+
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0);
+    const outLength = Math.floor(input.length * ratio);
+    const pcm16 = new Int16Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const sample = input[Math.floor(i / ratio)] || 0;
+      pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
+    }
+    sendFrame(packAudio(pcm16, STREAMING_AUDIO_SAMPLE_RATE, 1, Date.now() * 1000)).catch(() => { });
+  };
+
+  source.connect(processor);
+  processor.connect(streamAudioContext.destination);
+}
+
+function startStreamingVideoCapture(stream) {
+  const video = document.createElement('video');
+  video.srcObject = stream;
+  video.muted = true;
+  video.play();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 240;
+  const ctx = canvas.getContext('2d');
+
+  videoSendInterval = setInterval(() => {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) return;
+        const jpegBytes = new Uint8Array(await blob.arrayBuffer());
+        sendFrame(packVideo(jpegBytes, Date.now() * 1000)).catch(() => { });
+      },
+      'image/jpeg',
+      0.7
+    );
+  }, 1000 / STREAMING_VIDEO_FPS);
+}
+
+// --- Transport-specific connect implementations -----------------------------
+
+async function startWebRTC() {
+  activeTransport = 'webrtc';
+  setVideoDisplayMode('webrtc');
+  disableTransportSelect(true);
 
   pc = createPeerConnection();
 
@@ -492,15 +786,15 @@ async function start() {
   }
 
   if (constraints.audio || constraints.video) {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints)
-    stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+    mediaStream.getTracks().forEach((track) => {
+      pc.addTrack(track, mediaStream);
     });
     if (constraints.video) {
       const mediaDiv = document.getElementById('media');
       if (mediaDiv) mediaDiv.style.display = 'block';
       const videoEl = document.getElementById('video');
-      if (videoEl) videoEl.srcObject = stream;
+      if (videoEl) videoEl.srcObject = mediaStream;
     }
     await negotiate();
   } else {
@@ -509,6 +803,97 @@ async function start() {
 
   const stopBtn = document.getElementById('stop');
   if (stopBtn) stopBtn.style.display = 'inline-block';
+}
+
+async function startWebSocket() {
+  activeTransport = 'websocket';
+  setVideoDisplayMode('websocket');
+  disableTransportSelect(true);
+  setConnectionStatus('connecting');
+
+  const info = await (await fetch(`${BASE_URL}/websocket-info`)).json();
+  const host = resolveHost();
+  const scheme = info.secure ? 'wss' : 'ws';
+
+  socket = new WebSocket(`${scheme}://${host}:${info.port}/`);
+  socket.binaryType = 'arraybuffer';
+
+  await new Promise((resolve, reject) => {
+    socket.addEventListener('open', () => resolve(), { once: true });
+    socket.addEventListener('error', () => reject(new Error('WebSocket connection failed')), { once: true });
+  });
+  setConnectionStatus('connected');
+
+  const decoder = new FrameDecoder();
+  socket.addEventListener('message', (event) => {
+    for (const frame of decoder.feed(new Uint8Array(event.data))) handleIncomingFrame(frame);
+  });
+  socket.addEventListener('close', () => setConnectionStatus(iceConnectionLog.textContent + ' -> disconnected'));
+  socket.addEventListener('error', () => setConnectionStatus(iceConnectionLog.textContent + ' -> failed'));
+
+  await sendFrame(packControl(buildSessionParams()));
+  await startStreamingMedia();
+
+  const stopBtn = document.getElementById('stop');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
+}
+
+async function readWebTransportLoop() {
+  const decoder = new FrameDecoder();
+  while (activeTransport === 'webtransport') {
+    const { value, done } = await wtReader.read();
+    if (done) break;
+    for (const frame of decoder.feed(value)) handleIncomingFrame(frame);
+  }
+}
+
+async function startWebTransport() {
+  activeTransport = 'webtransport';
+  setVideoDisplayMode('webtransport');
+  disableTransportSelect(true);
+  setConnectionStatus('connecting');
+
+  const info = await (await fetch(`${BASE_URL}/webtransport-info`)).json();
+  const host = resolveHost();
+
+  const options = {};
+  if (info.certificateHash) {
+    options.serverCertificateHashes = [{ algorithm: 'sha-256', value: base64ToBytes(info.certificateHash).buffer }];
+  }
+
+  wtTransport = new WebTransport(`https://${host}:${info.port}/webtransport`, options);
+  wtTransport.closed
+    .then(() => setConnectionStatus(iceConnectionLog.textContent + ' -> disconnected'))
+    .catch(() => setConnectionStatus(iceConnectionLog.textContent + ' -> failed'));
+  await wtTransport.ready;
+  setConnectionStatus('connected');
+
+  const stream = await wtTransport.createBidirectionalStream();
+  wtWriter = stream.writable.getWriter();
+  wtReader = stream.readable.getReader();
+  readWebTransportLoop();
+
+  await sendFrame(packControl(buildSessionParams()));
+  await startStreamingMedia();
+
+  const stopBtn = document.getElementById('stop');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
+}
+
+async function start() {
+  const startBtn = document.getElementById('start');
+  if (startBtn) startBtn.style.display = 'none';
+
+  resetConversationLog();
+
+  const transport = getTransport();
+  if (transport === 'websocket') {
+    await startWebSocket();
+  } else if (transport === 'webtransport') {
+    await startWebTransport();
+  } else {
+    await startWebRTC();
+  }
 }
 
 async function stop() {
@@ -520,6 +905,8 @@ async function stop() {
   currentSessionId = null;
   refreshSessions();
 
+  activeTransport = null;
+
   if (pc) {
     pc.close();
     pc = null;
@@ -528,9 +915,36 @@ async function stop() {
   dcUnreliable = null;
   if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
 
+  if (socket) {
+    try { socket.close(); } catch (_) { }
+    socket = null;
+  }
+
+  if (videoSendInterval) { clearInterval(videoSendInterval); videoSendInterval = null; }
+  if (streamAudioContext) { await streamAudioContext.close().catch(() => { }); streamAudioContext = null; }
+
+  if (wtWriter) { try { await wtWriter.close(); } catch (_) { } wtWriter = null; }
+  wtReader = null;
+  if (wtTransport) { try { wtTransport.close(); } catch (_) { } wtTransport = null; }
+
+  if (playbackContext) { await playbackContext.close().catch(() => { }); playbackContext = null; }
+  nextPlaybackTime = 0;
+
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
+  }
+
+  disableTransportSelect(false);
+
   // Clear video sources
   const videoEl = document.getElementById('video');
   if (videoEl) videoEl.srcObject = null;
+  const canvasEl = document.getElementById('remote-canvas');
+  if (canvasEl) {
+    const ctx = canvasEl.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  }
   const mediaDiv = document.getElementById('media');
   if (mediaDiv) mediaDiv.style.display = 'none';
 
@@ -578,9 +992,7 @@ function sendKeyEvent(type, evt) {
   if (!controlEnabled) return;
   // Prevent arrow keys from scrolling the page while control is active
   if (ARROW_KEYS.has(evt.key)) evt.preventDefault();
-  const ch = dcUnreliable && dcUnreliable.readyState === 'open' ? dcUnreliable : dc;
-  if (!ch || ch.readyState !== 'open') return;
-  sendDataChannelMessage(ch, JSON.stringify({ type, key: evt.key, code: evt.code }));
+  sendControlMessage({ type, key: evt.key, code: evt.code });
 }
 
 document.addEventListener('keydown', (evt) => sendKeyEvent('keydown', evt));
@@ -594,7 +1006,7 @@ const handleProviderChange = () => {
   const sam2Checked = document.getElementById('provider-sam2')?.checked;
   const sam3Checked = document.getElementById('provider-sam3')?.checked;
   const inceptionChecked = document.getElementById('provider-inception')?.checked;
-  const insivisionChecked = document.getElementById('provider-insivision')?.checked;
+  const externalWebsocketChecked = document.getElementById('provider-external-websocket')?.checked;
   const mujocoChecked = document.getElementById('provider-mujoco')?.checked;
   const geminiRoboticsChecked = document.getElementById('provider-gemini-robotics')?.checked;
   const cosmosChecked = document.getElementById('provider-cosmos')?.checked;
@@ -606,7 +1018,7 @@ const handleProviderChange = () => {
     if (recvVideo) recvVideo.checked = true;
   }
 
-  if (insivisionChecked || mujocoChecked) {
+  if (externalWebsocketChecked || mujocoChecked) {
     const recvVideo = document.getElementById('recv-video');
     if (recvVideo) recvVideo.checked = true;
   }
@@ -619,7 +1031,7 @@ document.getElementById('provider-sam2')?.addEventListener('change', handleProvi
 document.getElementById('provider-sam3')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-inception')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-gemini-robotics')?.addEventListener('change', handleProviderChange);
-document.getElementById('provider-insivision')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-external-websocket')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-cosmos')?.addEventListener('change', handleProviderChange);
 
@@ -697,6 +1109,7 @@ async function refreshSessions() {
 
 // Join an existing session as a viewer/participant: receive its audio, video
 // and data channel events (and send mic audio when audio is enabled).
+// Joining an existing session is only supported over WebRTC.
 async function joinSession(sessionId) {
   if (pc) {
     alert('Already connected. Stop the current session first.');
@@ -706,10 +1119,11 @@ async function joinSession(sessionId) {
   const startBtn = document.getElementById('start');
   if (startBtn) startBtn.style.display = 'none';
 
-  // Reset transcription tracking and clear log
-  lastMessageElement = null;
-  isAppendingToLast = false;
-  if (dataChannelLog) dataChannelLog.innerHTML = '';
+  resetConversationLog();
+
+  activeTransport = 'webrtc';
+  setVideoDisplayMode('webrtc');
+  disableTransportSelect(true);
 
   // Make sure incoming video tracks get routed to the video element
   const recvVideo = document.getElementById('recv-video');
@@ -722,8 +1136,8 @@ async function joinSession(sessionId) {
 
   const useAudio = document.getElementById('use-audio');
   if (useAudio && useAudio.checked) {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStream.getTracks().forEach((track) => pc.addTrack(track, mediaStream));
   } else {
     pc.addTransceiver('audio', { direction: 'recvonly' });
   }
@@ -777,5 +1191,3 @@ async function joinSession(sessionId) {
 // Poll the active sessions every 10 seconds
 setInterval(refreshSessions, 10000);
 refreshSessions();
-
-

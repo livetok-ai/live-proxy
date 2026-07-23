@@ -346,6 +346,7 @@ class RTMPServer:
         """Bind the TCP socket and start accepting connections. Returns once ready."""
         self._server = await asyncio.start_server(self._handle_client, self.host, self.port)
         log_info(f"RTMP server listening on {self.host}:{self.port} (TCP)")
+        log_info(f"RTMP server callback URL: {self.callback_url or '<empty>'}")
 
     async def start(self):
         """Bind and run until closed. Suitable for asyncio.gather() alongside other servers."""

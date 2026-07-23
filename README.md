@@ -47,7 +47,7 @@ See [README_DEV.md](README_DEV.md) for detailed development setup instructions.
    # For Cartesia (TTS)
    CARTESIA_API_KEY=your_key_here python proxy.py
    ```
-   Local/self-hosted models (YOLO, SAM3, OCR, MediaPipe face landmarker, sentiment, local LLM, MuJoCo, Insivision) don't need an API key — see [Models supported](#models-supported).
+   Local/self-hosted models (YOLO, SAM3, OCR, MediaPipe face landmarker, sentiment, local LLM, MuJoCo, External Websocket) don't need an API key — see [Models supported](#models-supported).
 
    Useful flags: `--host`/`--port` (HTTP + WebRTC signaling, default `0.0.0.0:8080`), `--sip-port` (default `5060`), `--rtmp-port` (default `1935`), `--wt-port` (default `4433`), `--log-level`. Run `python proxy.py --help` for the full list.
 
@@ -149,10 +149,11 @@ flag), and type `3` for control messages (UTF-8 JSON). The very first control fr
 parameters (`model`, `system_instructions`, `tools`, `voice`, `language`, `api_key`, `metadata`, ...) — the same
 fields as the `/connection` HTTP body, minus `sdp`.
 
-Try it live at `http://localhost:8080/demo/webtransport.html` (works with the server's own ephemeral, short-lived
-self-signed certificate — the page fetches its SHA-256 hash from `GET /webtransport-info` and pins it via
-`serverCertificateHashes`). Pass `--wt-cert-file`/`--wt-key-file` to use a real certificate instead. Raw QUIC can't
-be driven from a browser (no raw socket API); see `tests/test_webtransport.py` for a scripted client example.
+Try it live at `http://localhost:8080/demo/index.html` (pick "WebTransport" from the Transport selector — works
+with the server's own ephemeral, short-lived self-signed certificate, since the page fetches its SHA-256 hash from
+`GET /webtransport-info` and pins it via `serverCertificateHashes`). Pass `--wt-cert-file`/`--wt-key-file` to use a
+real certificate instead. Raw QUIC can't be driven from a browser (no raw socket API); see
+`tests/test_webtransport.py` for a scripted client example.
 
 ### WebSocket Integration
 
@@ -162,9 +163,9 @@ that can't use WebTransport/QUIC. It reuses the exact same length-prefixed binar
 client sends the same init control frame with connection parameters, then audio/video/control frames as
 WebSocket binary messages.
 
-Try it live at `http://localhost:8080/demo/websocket.html` (the page fetches the port from
-`GET /websocket-info`). Pass `--ws-cert-file`/`--ws-key-file` to serve over `wss://` with a real certificate
-instead of plain `ws://`.
+Try it live at `http://localhost:8080/demo/index.html` (pick "WebSocket" from the Transport selector — the page
+fetches the port from `GET /websocket-info`). Pass `--ws-cert-file`/`--ws-key-file` to serve over `wss://` with a
+real certificate instead of plain `ws://`.
 
 ## HTTP control interface
 
@@ -202,7 +203,7 @@ The `model` parameter (or `model` query param for RTMP) selects the provider; pr
 | `face_landmarker` | MediaPipe Face Landmarker | Vision — facial landmark detection | Model weights fetched from Google's model store on first use. |
 | `inception` | FaceNet (Inception) | Vision — face embeddings | Local model, no API key. |
 | `text_sentiment` | Sentiment classifier | Text — sentiment analysis | Local model, no API key. |
-| `insivision` | Insivision | Vision — proxies frames to an external Insivision WebSocket server | Requires `INSIVISION_URL` (default `ws://localhost:8766`). |
+| `external_websocket` | External Websocket | Vision — proxies frames to an external WebSocket server | Requires `EXTERNAL_WEBSOCKET_URL` (default `ws://localhost:8766`). |
 | `mujoco` | MuJoCo | In-process physics simulation rendered as video | Requires `MUJOCO_SCENE_XML`. |
 
 Each provider declares which of `supports_audio`, `supports_video`, and `supports_text` it implements, so the proxy only wires up the media tracks a given model actually accepts.

@@ -549,8 +549,7 @@ class SIPServer:
 
         addr = self.server.sockets[0].getsockname()
         log_info(f"SIP server listening on {addr[0]}:{addr[1]} (TCP)")
-        if self.callback_url:
-            logger.info(f"Callback URL: {self.callback_url}")
+        log_info(f"SIP server callback URL: {self.callback_url or '<empty>'}")
 
     async def start(self):
         """Bind and run until closed. Suitable for asyncio.gather() alongside other servers."""

@@ -70,7 +70,7 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label for="model" class="block text-sm font-medium text-gray-700 mb-2">AI Model</label>
+              <label for="model" class="block text-sm font-medium text-gray-700 mb-2">LLM Model</label>
               <select id="model"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="none">None (Add-ons only)</option>
@@ -116,7 +116,8 @@
                 <div class="flex items-center">
                   <input id="provider-face-landmarker" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-face-landmarker" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                  <label for="provider-face-landmarker"
+                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
                     <span>Face Landmarker</span>
                   </label>
                 </div>
@@ -151,15 +152,17 @@
                 <div class="flex items-center">
                   <input id="provider-gemini-robotics" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-gemini-robotics" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                  <label for="provider-gemini-robotics"
+                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
                     <span>Gemini Robotics</span>
                   </label>
                 </div>
                 <div class="flex items-center">
-                  <input id="provider-insivision" type="checkbox"
+                  <input id="provider-external-websocket" type="checkbox"
                     class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-insivision" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Insivision</span>
+                  <label for="provider-external-websocket"
+                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                    <span>External Websocket</span>
                   </label>
                 </div>
                 <div class="flex items-center">
@@ -290,11 +293,11 @@
           </div>
         </div>
 
-        <!-- System Instructions -->
+        <!-- Instructions -->
         <div class="bg-white rounded-xl shadow-sm border p-6">
           <div class="flex items-center space-x-3 mb-6">
             <i class="fas fa-file-alt text-primary text-lg"></i>
-            <h2 class="text-xl font-semibold text-gray-900">System Instructions</h2>
+            <h2 class="text-xl font-semibold text-gray-900">Instructions</h2>
           </div>
           <div class="mb-4">
             <label for="system-instructions-preset" class="block text-sm font-medium text-gray-700 mb-2">Preset
@@ -303,6 +306,7 @@
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
               <option value="appointment">Appointment with Tools</option>
               <option value="saml">Generic with SAML</option>
+              <option value="vision">Vision</option>
             </select>
           </div>
           <textarea id="system-instructions" rows="12"
@@ -311,30 +315,24 @@
 
 - Use natural filler words like "hmm," "mhm," "right," "uh," and "just." Don't overdo it. Use "uh" only when expressing hesitation or uncertainty.
 - Insert brief pauses mid-sentence and between thoughts. The silence might feel awkward, but it makes speech more lifelike.
-- Occasionally self-correct or rephrase, as real people do. For example:  
+- Occasionally self-correct or rephrase, as real people do. For example:
     "It looks like that item is... actually, we'll have it next week."
 - Speak at a moderate pace with some natural variation. Speed up a little when you're confident, slow down slightly when thinking.
-- Drop in incomplete sentences or fragments when it sounds more human:  
-    "Sure, no problem."  
+- Drop in incomplete sentences or fragments when it sounds more human:
+    "Sure, no problem."
     "Next Tuesday... sounds good?"
-- Acknowledge the user with casual affirmations like:  
+- Acknowledge the user with casual affirmations like:
     "Ah-huh," "That's right," "Yeah," "Gotcha," "Perfect," "Absolutely."
 - Keep explanations brief, clear, and easy to understand. Don't sound scripted or robotic.
 - Output in plain text only. Avoid hyphens. Use commas frequently to create a natural rhythm.
 - Read phone numbers as separate digits like six, one, two, five, seven, eight and not as a whole number like six hundred and eighty four million three hundred and thirty two thousand three hundred and twenty one.  When reading a phone number, don't read the country code, just the number (skip international preffix like +34, +1 ...).
 
 Remember, you're not reading from a script. You're just... talking.</textarea>
-        </div>
-
-        <!-- Tools Configuration -->
-        <div class="bg-white rounded-xl shadow-sm border p-6">
-          <div class="flex items-center space-x-3 mb-6">
-            <i class="fas fa-tools text-primary text-lg"></i>
-            <h2 class="text-xl font-semibold text-gray-900">Tools Configuration</h2>
-          </div>
-          <textarea id="tools" rows="8"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
-            placeholder="Enter tools configuration in JSON format...">[
+          <div class="mt-4">
+            <label for="tools" class="block text-sm font-medium text-gray-700 mb-2">Tools Configuration</label>
+            <textarea id="tools" rows="8"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
+              placeholder="Enter tools configuration in JSON format...">[
     {
         "name": "find_appointment",
         "description": "Use this tool to find an existing appointment from a customer and get the details of the appointment (date, time, service and appointment id)",
@@ -385,6 +383,7 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
         "url": "http://localhost:3000/api/live-proxy/tools"
     }
 ]</textarea>
+          </div>
         </div>
       </div>
 
@@ -394,6 +393,15 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
         <div class="bg-white rounded-xl shadow-sm border p-6">
           <h2 class="text-xl font-semibold text-gray-900 mb-6">Connection Control</h2>
           <div class="space-y-4">
+            <div>
+              <label for="transport" class="block text-sm font-medium text-gray-700 mb-2">Transport</label>
+              <select id="transport"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="webrtc" selected>WebRTC</option>
+                <option value="websocket">WebSocket</option>
+                <option value="webtransport">WebTransport</option>
+              </select>
+            </div>
             <button id="start" onclick="start().catch(alert)"
               class="w-full bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
               <i class="fas fa-play"></i>
@@ -427,11 +435,14 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
           <div class="space-y-4">
             <audio id="audio" autoplay="true" class="w-full"></audio>
             <div class="relative w-full rounded-lg bg-gray-900 overflow-hidden">
-              <video id="video" autoplay="true" playsinline="true" muted="true"
-                class="w-full"></video>
+              <video id="video" autoplay="true" playsinline="true" muted="true" class="w-full"></video>
+              <canvas id="remote-canvas" class="w-full hidden"></canvas>
               <div id="detection-boxes-container" class="absolute inset-0 pointer-events-none"></div>
-              <div id="detection-labels-container" class="absolute top-2 left-2 right-2 flex flex-wrap gap-2 pointer-events-none"></div>
-              <div id="video-overlay" class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded text-sm hidden font-medium pointer-events-none transition-all duration-300"></div>
+              <div id="detection-labels-container"
+                class="absolute top-2 left-2 right-2 flex flex-wrap gap-2 pointer-events-none"></div>
+              <div id="video-overlay"
+                class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded text-sm hidden font-medium pointer-events-none transition-all duration-300">
+              </div>
             </div>
             <button id="enable-control" onclick="toggleControl()"
               class="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors flex items-center justify-center space-x-2">
@@ -459,7 +470,8 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
             <i class="fas fa-wave-square"></i>
             <span>Status</span>
           </h2>
-          <pre id="inference-status" class="h-40 overflow-y-auto border rounded-lg bg-gray-50 p-4 text-xs text-gray-700 whitespace-pre-wrap break-words">No inference yet.</pre>
+          <pre id="inference-status"
+            class="h-40 overflow-y-auto border rounded-lg bg-gray-50 p-4 text-xs text-gray-700 whitespace-pre-wrap break-words">No inference yet.</pre>
         </div>
       </div>
     </div>
@@ -509,9 +521,10 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
   </script>
 
   <script>
-    // System Instructions Presets
-    const systemInstructionsPresets = {
-      appointment: `You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively. Use the following guidelines:
+    // Instruction Presets: each template bundles its own system instructions and tools
+    const templatePresets = {
+      appointment: {
+        prompt: `You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively. Use the following guidelines:
 
 - Use natural filler words like "hmm," "mhm," "right," "uh," and "just." Don't overdo it. Use "uh" only when expressing hesitation or uncertainty.
 - Insert brief pauses mid-sentence and between thoughts. The silence might feel awkward, but it makes speech more lifelike.
@@ -528,21 +541,80 @@ Remember, you're not reading from a script. You're just... talking.</textarea>
 - Read phone numbers as separate digits like six, one, two, five, seven, eight and not as a whole number like six hundred and eighty four million three hundred and thirty two thousand three hundred and twenty one.  When reading a phone number, don't read the country code, just the number (skip international preffix like +34, +1 ...).
 
 Remember, you're not reading from a script. You're just... talking.`,
-      saml: `You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively.
+        tools: `[
+    {
+        "name": "find_appointment",
+        "description": "Use this tool to find an existing appointment from a customer and get the details of the appointment (date, time, service and appointment id)",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "phone_number": {
+                    "type": "STRING",
+                    "description": "The phone number of the customer"
+                }
+            }
+        },
+        "response": {
+            "type": "OBJECT",
+            "properties": {
+                "appointment": {
+                    "type": "OBJECT",
+                    "description": "The appointment details if found"
+                }
+            }
+        },
+        "url": "http://localhost:3000/api/live-proxy/tools"
+    },
+    {
+        "name": "book_appointment",
+        "description": "Use this tool to book an appointment",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "phone_number": {
+                    "type": "STRING",
+                    "description": "The phone number of the customer"
+                },
+                "date": {
+                    "type": "STRING",
+                    "description": "The date of the appointment"
+                },
+                "time": {
+                    "type": "STRING",
+                    "description": "The time of the appointment"
+                },
+                "service": {
+                    "type": "STRING",
+                    "description": "The service of the appointment"
+                }
+            }
+        },
+        "url": "http://localhost:3000/api/live-proxy/tools"
+    }
+]`,
+      },
+      saml: {
+        prompt: `You are a friendly, conversational voice assistant. Your tone is warm, casual, and human-like. Your goal is to sound natural, spontaneous, and helpful, like someone chatting informally but informatively.
 
 - Generate output using SAML tags like <emotion value="sad" /> or other emotions when appropriate.
 - The primary emotions, for which we have the most data and produce the best results, are: neutral, angry, excited, sad, and scared.
 - You can also use the special tag [laughter] in case something is very funny.
-- Only use emotion SAML tags and the [laughter] tag.   Don't use others.`
+- Only use emotion SAML tags and the [laughter] tag.   Don't use others.`,
+        tools: `[]`,
+      },
+      vision: {
+        prompt: `Describe scene.`,
+        tools: `[]`,
+      },
     };
 
     // Handle preset selection change
     document.getElementById('system-instructions-preset').addEventListener('change', function (e) {
       const preset = e.target.value;
-      const textarea = document.getElementById('system-instructions');
-      if (systemInstructionsPresets[preset]) {
-        textarea.value = systemInstructionsPresets[preset];
-      }
+      const template = templatePresets[preset];
+      if (!template) return;
+      document.getElementById('system-instructions').value = template.prompt;
+      document.getElementById('tools').value = template.tools;
     });
   </script>
 

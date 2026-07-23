@@ -66,6 +66,7 @@
           class="relative w-full rounded-lg bg-gray-900 overflow-hidden shadow-inner flex items-center justify-center aspect-video">
           <video id="video" autoplay="true" playsinline="true" muted="true"
             class="w-full h-full object-contain"></video>
+          <canvas id="remote-canvas" class="w-full h-full object-contain hidden"></canvas>
           <div id="detection-boxes-container" class="absolute inset-0 pointer-events-none"></div>
           <div id="detection-labels-container" class="absolute top-2 left-2 right-2 flex flex-wrap gap-2 pointer-events-none"></div>
           <div id="video-overlay"
@@ -91,6 +92,15 @@
         <h2 class="text-xl font-semibold text-gray-900">Connection Control</h2>
       </div>
       <div class="space-y-4">
+        <div>
+          <label for="transport" class="block text-sm font-medium text-gray-700 mb-2">Transport</label>
+          <select id="transport"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+            <option value="webrtc" selected>WebRTC</option>
+            <option value="websocket" disabled>WebSocket (joining a session requires WebRTC)</option>
+            <option value="webtransport" disabled>WebTransport (joining a session requires WebRTC)</option>
+          </select>
+        </div>
 
         <button id="start" onclick="connectSession().catch(alert)"
           class="w-full bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">

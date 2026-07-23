@@ -61,11 +61,11 @@ try:
     from port_range import get_sip_port_range, get_webrtc_port_range, restrict_ice_gathering_port_range
     from providers.cartesia import CartesiaProvider
     from providers.cosmos import CosmosProvider
+    from providers.external_websocket import ExternalWebsocketProvider
     from providers.face_landmarker import FaceLandmarkerProvider
     from providers.gemini import GeminiProvider
     from providers.gemini_robotics import GeminiRoboticsProvider
     from providers.inception import InceptionProvider
-    from providers.insivision import InsivisionProvider
     from providers.local_llm import LocalLLMProvider
     from providers.mujoco import MujocoProvider
     from providers.ocr import OCRProvider
@@ -100,7 +100,7 @@ MODEL_MAP = {
     "cartesia": CartesiaProvider,
     "local_llm": LocalLLMProvider,
     "ocr": OCRProvider,
-    "insivision": InsivisionProvider,
+    "external_websocket": ExternalWebsocketProvider,
     "mujoco": MujocoProvider,
     "gemini-robotics": GeminiRoboticsProvider,
     "cosmos": CosmosProvider,

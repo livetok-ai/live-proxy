@@ -559,6 +559,7 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     logging.getLogger("aioice").setLevel(level=logging.WARN)
+    logging.getLogger("websockets.server").setLevel(level=logging.WARNING)
     logging.getLogger("httpx").setLevel(level=logging.WARNING)
     logging.getLogger("google_genai.models").setLevel(level=logging.WARNING)
 
