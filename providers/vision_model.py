@@ -166,10 +166,17 @@ class VisionModel(Model):
 
     async def _run_process_frame(self, image: Image):
         start = time.monotonic()
+        log_trace(
+            f"{type(self).__name__} processing frame #{self.frame_count} begin",
+            context=self._log_context,
+        )
         try:
             await self.process_frame(image)
         except Exception as e:
-            log_info(f"{type(self).__name__} error processing frame: {e}")
+            log_info(
+                f"{type(self).__name__} error processing frame #{self.frame_count}: {e}",
+                context=self._log_context,
+            )
         else:
             elapsed_ms = (time.monotonic() - start) * 1000
             log_trace(

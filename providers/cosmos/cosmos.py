@@ -12,7 +12,7 @@ from PIL import ImageDraw
 from PIL.Image import Image
 from transformers import AutoProcessor, Cosmos3OmniForConditionalGeneration
 
-from logger import log_info, log_warn
+from logger import log_info, log_trace, log_warn
 from providers.vision_model import VisionModel
 from utils import parse_bool, parse_int
 
@@ -203,28 +203,37 @@ class CosmosProvider(VisionModel):
     def _generate(self, messages):
         """Blocking generation call, run in a thread executor to keep the
         asyncio event loop responsive."""
-        inputs = self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(self._model_instance.device, torch.bfloat16)
+        log_trace("Cosmos _generate begin", context=self._log_context)
+        try:
+            inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+            ).to(self._model_instance.device, torch.bfloat16)
 
-        with torch.no_grad():
-            generated_ids = self._model_instance.generate(
-                **inputs,
-                do_sample=True,
-                temperature=0.6,
-                max_new_tokens=self.max_tokens,
+            with torch.no_grad():
+                generated_ids = self._model_instance.generate(
+                    **inputs,
+                    do_sample=True,
+                    temperature=0.6,
+                    max_new_tokens=self.max_tokens,
+                )
+            generated_ids_trimmed = [
+                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
+            output = self.processor.batch_decode(
+                generated_ids_trimmed,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
             )
-        generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-        output = self.processor.batch_decode(
-            generated_ids_trimmed,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )
-        return output[0] if output else ""
+            result = output[0] if output else ""
+        except Exception as e:
+            log_trace(f"Cosmos _generate end: error {e!r}", context=self._log_context)
+            raise
+        log_trace(f"Cosmos _generate end: {result!r}", context=self._log_context)
+        return result
 
     async def _run_window_inference(self, frames):
         try:
