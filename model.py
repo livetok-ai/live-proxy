@@ -60,6 +60,10 @@ class Model:
     def disable_output(self):
         self.output_enabled = False
 
+    @property
+    def _log_context(self) -> Optional[str]:
+        return self.connection.id if self.connection else self.name
+
     def on(self, event_type: str, handler: Callable[[Any], None]):
         """Register an event handler for the specified event type.
 
@@ -110,7 +114,9 @@ class Model:
             event_type: The type of event being emitted
             data: The event data to pass to handlers
         """
-        from logger import log_info
+        from logger import log_info, log_trace
+
+        log_trace(f"Event generated: {event_type}", context=self._log_context)
 
         for handler in self._event_handlers[event_type]:
             try:

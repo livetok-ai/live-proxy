@@ -1,4 +1,5 @@
 import asyncio
+import time
 from abc import abstractmethod
 from typing import AsyncIterator, Tuple
 
@@ -6,7 +7,7 @@ from av import VideoFrame
 from PIL import ImageDraw
 from PIL.Image import Image
 
-from logger import log_info
+from logger import log_info, log_trace
 from model import Input, Model, Output
 from utils import limit_queue_size, parse_bool, parse_int
 
@@ -164,10 +165,17 @@ class VisionModel(Model):
             self.output_queue.put_nowait(new_frame)
 
     async def _run_process_frame(self, image: Image):
+        start = time.monotonic()
         try:
             await self.process_frame(image)
         except Exception as e:
             log_info(f"{type(self).__name__} error processing frame: {e}")
+        else:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            log_trace(
+                f"{type(self).__name__} processed frame #{self.frame_count} in {elapsed_ms:.1f}ms",
+                context=self._log_context,
+            )
         finally:
             self._processing = False
             if self._pending_frame is not None:
