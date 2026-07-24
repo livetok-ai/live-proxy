@@ -12,7 +12,7 @@ from PIL import ImageDraw
 from PIL.Image import Image
 from transformers import AutoProcessor, Cosmos3OmniForConditionalGeneration
 
-from logger import log_info, log_warn
+from logger import log_info, log_trace, log_warn
 from providers.vision_model import VisionModel
 from utils import parse_bool, parse_int
 
@@ -78,6 +78,35 @@ class CosmosProvider(VisionModel):
             cls._shared_processor, cls._shared_model = await loop.run_in_executor(None, _load)
             cls._shared_model_id = model_id
             log_info(f"Loaded Cosmos model: {model_id} in {time.monotonic() - start:.1f}s")
+            cls._log_device(cls._shared_model)
+
+    @staticmethod
+    def _log_device(model):
+        """Log which device(s) the model actually landed on. device_map="auto"
+        silently offloads layers to CPU/disk when GPU memory is scarce, which
+        looks identical to a healthy load but is dramatically slower."""
+        device_map = getattr(model, "hf_device_map", None)
+        if device_map:
+            devices = sorted({str(d) for d in device_map.values()})
+            log_info(f"Cosmos device map: {devices}")
+            if any(d in ("cpu", "disk") for d in devices):
+                log_warn(
+                    "Cosmos model has layers offloaded to CPU/disk (insufficient free GPU memory "
+                    "at load time) — inference will be much slower than a fully-GPU-resident model"
+                )
+        else:
+            device = next(model.parameters()).device
+            log_info(f"Cosmos model device: {device}")
+
+        if torch.cuda.is_available():
+            idx = torch.cuda.current_device()
+            name = torch.cuda.get_device_name(idx)
+            free, total = torch.cuda.mem_get_info(idx)
+            log_info(
+                f"CUDA device {idx}: {name}, free {free / 1e9:.1f}GB / total {total / 1e9:.1f}GB"
+            )
+        else:
+            log_warn("CUDA is not available — Cosmos is running on CPU")
 
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
@@ -203,28 +232,40 @@ class CosmosProvider(VisionModel):
     def _generate(self, messages):
         """Blocking generation call, run in a thread executor to keep the
         asyncio event loop responsive."""
-        inputs = self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(self._model_instance.device, torch.bfloat16)
+        log_trace("Cosmos _generate begin", context=self._log_context)
+        start = time.monotonic()
+        try:
+            inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+            ).to(self._model_instance.device, torch.bfloat16)
 
-        with torch.no_grad():
-            generated_ids = self._model_instance.generate(
-                **inputs,
-                do_sample=True,
-                temperature=0.6,
-                max_new_tokens=self.max_tokens,
+            with torch.no_grad():
+                generated_ids = self._model_instance.generate(
+                    **inputs,
+                    do_sample=True,
+                    temperature=0.6,
+                    max_new_tokens=self.max_tokens,
+                )
+            generated_ids_trimmed = [
+                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
+            output = self.processor.batch_decode(
+                generated_ids_trimmed,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
             )
-        generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-        output = self.processor.batch_decode(
-            generated_ids_trimmed,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )
-        return output[0] if output else ""
+            result = output[0] if output else ""
+        except Exception as e:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            log_trace(f"Cosmos _generate end: error {e!r} in {elapsed_ms:.1f}ms", context=self._log_context)
+            raise
+        elapsed_ms = (time.monotonic() - start) * 1000
+        log_trace(f"Cosmos _generate end: {result!r} in {elapsed_ms:.1f}ms", context=self._log_context)
+        return result
 
     async def _run_window_inference(self, frames):
         try:
