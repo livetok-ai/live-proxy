@@ -480,10 +480,12 @@ function createPeerConnection() {
         evt.receiver.jitterBufferTarget = 0.1;
       }
       const videoEl = document.getElementById('video');
-      if (videoEl) videoEl.srcObject = evt.streams[0];
+      const currentTrack = videoEl?.srcObject?.getVideoTracks?.()[0];
+      if (videoEl && currentTrack?.id !== evt.track.id) videoEl.srcObject = evt.streams[0];
     } else {
       const audioEl = document.getElementById('audio');
-      if (audioEl) audioEl.srcObject = evt.streams[0];
+      const currentTrack = audioEl?.srcObject?.getAudioTracks?.()[0];
+      if (audioEl && currentTrack?.id !== evt.track.id) audioEl.srcObject = evt.streams[0];
     }
   });
 
@@ -793,8 +795,12 @@ async function startWebRTC() {
     if (constraints.video) {
       const mediaDiv = document.getElementById('media');
       if (mediaDiv) mediaDiv.style.display = 'block';
-      const videoEl = document.getElementById('video');
-      if (videoEl) videoEl.srcObject = mediaStream;
+      // Skip the local preview if remote video is expected too, since the
+      // 'track' handler will immediately replace it, causing a flicker.
+      if (!recvVideo) {
+        const videoEl = document.getElementById('video');
+        if (videoEl) videoEl.srcObject = mediaStream;
+      }
     }
     await negotiate();
   } else {
