@@ -125,6 +125,7 @@ class CosmosProvider(VisionModel):
         self._first_capture = None
         self._last_dispatch = None
         self._inference_inflight = False
+        self._inference_task = None
 
         log_info(
             f"Cosmos provider model: {self.model} window: {self.window_seconds}s "
@@ -175,7 +176,7 @@ class CosmosProvider(VisionModel):
         if window_filled and stride_elapsed:
             self._inference_inflight = True
             self._last_dispatch = now
-            asyncio.ensure_future(self._run_window_inference(list(self._frames)))
+            self._inference_task = asyncio.ensure_future(self._run_window_inference(list(self._frames)))
 
     def _encode_frame(self, image: Image) -> str:
         """Downscale, optionally stamp a timestamp, and JPEG-encode to a data URI."""
@@ -274,6 +275,8 @@ class CosmosProvider(VisionModel):
 
     async def close(self):
         log_info("Closing Cosmos provider")
+        if self._inference_task is not None and not self._inference_task.done():
+            await self._inference_task
         self.processor = None
         self._model_instance = None
         self.clear_overlay()
