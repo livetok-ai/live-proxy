@@ -102,9 +102,7 @@ class CosmosProvider(VisionModel):
             idx = torch.cuda.current_device()
             name = torch.cuda.get_device_name(idx)
             free, total = torch.cuda.mem_get_info(idx)
-            log_info(
-                f"CUDA device {idx}: {name}, free {free / 1e9:.1f}GB / total {total / 1e9:.1f}GB"
-            )
+            log_info(f"CUDA device {idx}: {name}, free {free / 1e9:.1f}GB / total {total / 1e9:.1f}GB")
         else:
             log_warn("CUDA is not available — Cosmos is running on CPU")
 
@@ -250,9 +248,7 @@ class CosmosProvider(VisionModel):
                     temperature=0.6,
                     max_new_tokens=self.max_tokens,
                 )
-            generated_ids_trimmed = [
-                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
+            generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
             output = self.processor.batch_decode(
                 generated_ids_trimmed,
                 skip_special_tokens=True,

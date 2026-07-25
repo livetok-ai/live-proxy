@@ -7,8 +7,8 @@ import socket
 import pytest
 import websockets
 
-from interfaces.webtransport.protocol import pack_audio, pack_control
 from interfaces.websocket.server import WebSocketServer
+from interfaces.webtransport.protocol import pack_audio, pack_control
 
 
 def _free_tcp_port() -> int:

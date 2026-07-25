@@ -40,8 +40,8 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
 from connection import ConnectionManager
 from interfaces.rtmp import RTMPServer
 from interfaces.sip import SIPServer
-from interfaces.webtransport import WebTransportServer
 from interfaces.websocket import WebSocketServer
+from interfaces.webtransport import WebTransportServer
 from logger import log_info, log_warn
 from session import SessionManager
 
