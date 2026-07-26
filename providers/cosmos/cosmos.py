@@ -270,8 +270,9 @@ class CosmosProvider(VisionModel):
             content.append({"type": "text", "text": self.prompt})
             messages = [{"role": "user", "content": content}]
 
-            loop = asyncio.get_event_loop()
-            text = await loop.run_in_executor(None, self._generate, messages)
+            # Serialized against other connections sharing the same model instance
+            # (see Model.run_shared_inference).
+            text = await self.run_shared_inference(lambda: self._generate(messages))
 
             think_match = THINK_TAG_RE.search(text)
             reasoning = think_match.group(1).strip() if think_match else None

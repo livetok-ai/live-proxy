@@ -56,9 +56,9 @@ class SamProvider(VisionModel):
         self.last_masks = []
 
     async def process_frame(self, image: Image):
-        # Run inference in the default executor (thread pool) to keep asyncio event loop responsive
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(None, lambda: self.model(image, device=self.device, verbose=False))
+        # Run inference in the default executor, serialized against other connections
+        # sharing the same model instance (see Model.run_shared_inference).
+        results = await self.run_shared_inference(lambda: self.model(image, device=self.device, verbose=False))
 
         detected_masks = []
         if results and len(results) > 0:

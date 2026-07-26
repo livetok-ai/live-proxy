@@ -78,8 +78,9 @@ class InceptionProvider(Model):
         should_process = (self.frame_count % self.sampling_rate == 1) or (self.sampling_rate <= 1)
 
         if self.input_enabled and should_process:
-            loop = asyncio.get_event_loop()
-            embedding = await loop.run_in_executor(None, self._process_frame, input)
+            # Serialized against other connections sharing the same model instance
+            # (see Model.run_shared_inference).
+            embedding = await self.run_shared_inference(lambda: self._process_frame(input))
 
             if embedding is not None:
                 embedding_list = embedding.tolist()

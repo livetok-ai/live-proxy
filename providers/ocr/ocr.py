@@ -88,10 +88,10 @@ class OCRProvider(VisionModel):
         # Convert PIL image to numpy array for EasyOCR
         image_np = np.array(image.convert("RGB"))
 
-        # Run OCR in thread executor to keep asyncio responsive
-        loop = asyncio.get_event_loop()
+        # Run OCR in the default executor, serialized against other connections
+        # sharing the same reader instance (see Model.run_shared_inference).
         try:
-            results = await loop.run_in_executor(None, lambda: self.reader.readtext(image_np))
+            results = await self.run_shared_inference(lambda: self.reader.readtext(image_np))
         except Exception as e:
             log_warn(f"Error during OCR text detection: {e}")
             results = []

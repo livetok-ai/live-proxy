@@ -1,3 +1,4 @@
+import asyncio
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, AsyncIterator, Callable, Optional, Union
@@ -149,6 +150,28 @@ class Model:
     async def setup(cls):
         """Perform any heavy initialization or model downloading needed before use."""
         pass
+
+    @classmethod
+    def _get_shared_inference_semaphore(cls) -> asyncio.Semaphore:
+        """Per-class semaphore serializing calls to a model instance that's shared
+        (via a `_shared_*` class attribute) across every connection's provider
+        instance. Without it, two connections could run inference on the same
+        model at once, which risks GPU OOM from duplicated activations/KV-cache
+        and, for models offloaded across devices, races in the device-placement
+        hooks. Stored on `cls.__dict__` directly so each subclass sharing its own
+        model gets its own semaphore rather than inheriting one from a sibling."""
+        if "_shared_inference_semaphore" not in cls.__dict__:
+            cls._shared_inference_semaphore = asyncio.Semaphore(1)
+        return cls._shared_inference_semaphore
+
+    async def run_shared_inference(self, func: Callable[[], Any]) -> Any:
+        """Run a blocking, zero-arg `func` in the default executor, serialized
+        against other connections whose provider instance shares the same
+        class-level model. Use for any inference call against a `_shared_*`
+        model/processor/reader set up in `setup()`."""
+        loop = asyncio.get_event_loop()
+        async with type(self)._get_shared_inference_semaphore():
+            return await loop.run_in_executor(None, func)
 
     @abstractmethod
     async def send(self, _input: Input):
