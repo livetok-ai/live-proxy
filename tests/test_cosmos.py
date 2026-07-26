@@ -234,17 +234,3 @@ async def test_cosmos_provider_single_inflight_request():
     await provider.process_frame(make_image())
     await drain_tasks(provider)
     assert len(processor.calls) == 2
-
-
-@pytest.mark.asyncio
-async def test_cosmos_provider_overlay():
-    provider = CosmosProvider(name="cosmos", draw=True)
-    image = make_image(320, 240)
-
-    # Without an answer the frame is passed through untouched.
-    assert provider.draw_overlay(image) is image
-
-    provider.last_answer = "A person walks by."
-    drawn = provider.draw_overlay(image)
-    assert drawn is not image
-    assert drawn.size == image.size

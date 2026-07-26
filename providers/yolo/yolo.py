@@ -41,10 +41,7 @@ class YoloProvider(VisionModel):
         self.model_name = kwargs.get("model") or name
         self.model = None
         self.last_detected_Boxes = []
-        log_info(
-            f"YOLO provider model: {self.model_name} draw_detections: {self.draw_detections} "
-            f"sampling_rate: {self.sampling_rate}"
-        )
+        log_info(f"YOLO provider model: {self.model_name} sampling_rate: {self.sampling_rate}")
 
     @property
     def is_ready(self) -> bool:

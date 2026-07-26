@@ -14,7 +14,6 @@ async def test_ocr_provider_init():
     provider = OCRProvider()
     assert provider.reader is None
     assert provider.languages == ["en"]
-    assert provider.overlay_enabled is False
     assert provider.sampling_rate == 5
 
 
@@ -107,12 +106,12 @@ class DummyConnection:
 
 
 @pytest.mark.asyncio
-async def test_ocr_provider_draw_detections():
-    """Test OCRProvider draws boxes and outputs VideoFrames when draw is True."""
+async def test_ocr_provider_forwards_frames():
+    """Test OCRProvider outputs a VideoFrame for every frame sent."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = OCRProvider(name="ocr", connection=conn, draw=True, sampling=1)
+    provider = OCRProvider(name="ocr", connection=conn, sampling=1)
     provider.reader = MockEasyOCRReader()
 
     # Send a dummy frame with pts/time_base
@@ -122,7 +121,7 @@ async def test_ocr_provider_draw_detections():
 
     await provider.send(img)
 
-    # Receive the drawn frame from the output queue
+    # Receive the frame from the output queue
     received_frames = []
     async for frame in provider.recv():
         received_frames.append(frame)

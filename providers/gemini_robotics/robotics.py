@@ -37,10 +37,7 @@ class GeminiRoboticsProvider(VisionModel):
         self.client = None
         self.last_detected_Boxes = []
 
-        log_info(
-            f"Gemini Robotics provider model: {self.model} draw_detections: {self.draw_detections} "
-            f"sampling_rate: {self.sampling_rate}"
-        )
+        log_info(f"Gemini Robotics provider model: {self.model} sampling_rate: {self.sampling_rate}")
 
     @property
     def is_ready(self) -> bool:

@@ -64,10 +64,7 @@ class OCRProvider(VisionModel):
         else:
             self.languages = list(langs_str) if langs_str else ["en"]
 
-        log_info(
-            f"OCR provider initialized. draw_detections: {self.draw_detections}, "
-            f"sampling_rate: {self.sampling_rate}, languages: {self.languages}"
-        )
+        log_info(f"OCR provider initialized. sampling_rate: {self.sampling_rate}, languages: {self.languages}")
 
     @property
     def is_ready(self) -> bool:

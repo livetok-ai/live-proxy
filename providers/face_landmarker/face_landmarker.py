@@ -50,9 +50,7 @@ class FaceLandmarkerProvider(VisionModel):
         self.detector = None
         self.model_path = None
         self.last_detected_Boxes = []
-        log_info(
-            f"Face Landmarker provider draw_detections: {self.draw_detections} sampling_rate: {self.sampling_rate}"
-        )
+        log_info(f"Face Landmarker provider sampling_rate: {self.sampling_rate}")
 
     @property
     def is_ready(self) -> bool:

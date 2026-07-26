@@ -63,12 +63,12 @@ class DummyConnection:
 
 
 @pytest.mark.asyncio
-async def test_sam3_provider_draw_detections():
-    """Test Sam3Provider draws detections and yields VideoFrames when enabled."""
+async def test_sam3_provider_forwards_frames():
+    """Test Sam3Provider yields VideoFrames for every frame sent."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = SamProvider(name="sam", connection=conn, draw=True)
+    provider = SamProvider(name="sam", connection=conn)
 
     # Mock setup
     async def mock_setup(model_version):
@@ -79,7 +79,6 @@ async def test_sam3_provider_draw_detections():
 
     try:
         await provider.connect()
-        assert provider.overlay_enabled is True
 
         # Send a dummy frame
         img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -123,7 +122,7 @@ async def test_sam3_provider_sampling():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = SamProvider(name="sam", connection=conn, draw=True, sampling=5)
+    provider = SamProvider(name="sam", connection=conn, sampling=5)
 
     async def mock_setup(model_version):
         SamProvider._shared_model = "mock_sam_model"
@@ -133,7 +132,6 @@ async def test_sam3_provider_sampling():
 
     try:
         await provider.connect()
-        assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 
         # Mock the actual SAM model inference to count calls

@@ -157,7 +157,7 @@ class CosmosProvider(VisionModel):
         log_info(
             f"Cosmos provider model: {self.model} window: {self.window_seconds}s "
             f"overlap: {self.overlap_seconds}s fps: {self.fps} resolution: {self.resolution} "
-            f"timestamps: {self.add_timestamps} draw: {self.draw_detections}"
+            f"timestamps: {self.add_timestamps}"
         )
 
     @property
@@ -292,23 +292,6 @@ class CosmosProvider(VisionModel):
             log_warn(f"Cosmos error processing window of {len(frames)} frames: {e}")
         finally:
             self._inference_inflight = False
-
-    def draw_overlay(self, image: Image) -> Image:
-        if not self.last_answer:
-            return image
-
-        image = image.copy()
-        draw = ImageDraw.Draw(image)
-        text = self.last_answer if len(self.last_answer) <= 120 else self.last_answer[:117] + "..."
-        try:
-            bbox = draw.textbbox((0, 0), text)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        except AttributeError:
-            tw, th = draw.textsize(text)
-        x, y = 8, image.height - th - 12
-        draw.rectangle([x - 4, y - 4, x + tw + 4, y + th + 4], fill=(0, 0, 0))
-        draw.text((x, y), text, fill=(255, 255, 255))
-        return image
 
     async def close(self):
         log_info("Closing Cosmos provider")

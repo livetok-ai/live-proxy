@@ -30,10 +30,7 @@ class SamProvider(VisionModel):
         self.model_version = kwargs.get("version", "sam2.1_t.pt")
         self.device = kwargs.get("device", None)
         self.last_masks = []
-        log_info(
-            f"SAM provider version: {self.model_version} draw_detections: {self.draw_detections} "
-            f"sampling_rate: {self.sampling_rate}"
-        )
+        log_info(f"SAM provider version: {self.model_version} sampling_rate: {self.sampling_rate}")
 
     @property
     def is_ready(self) -> bool:

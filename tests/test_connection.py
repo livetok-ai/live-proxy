@@ -8,10 +8,13 @@ def test_parse_model():
     assert parse_model("yolo") == ("yolo", {})
 
     # Model with arguments
-    assert parse_model("sam[version=sam2.1_t.pt,draw=true]") == ("sam", {"version": "sam2.1_t.pt", "draw": True})
+    assert parse_model("sam[version=sam2.1_t.pt,sampling=5]") == ("sam", {"version": "sam2.1_t.pt", "sampling": 5})
 
     # Model with quoted arguments
-    assert parse_model("sam[version=\"sam2.1_t.pt\",draw='true']") == ("sam", {"version": "sam2.1_t.pt", "draw": True})
+    assert parse_model("sam[version=\"sam2.1_t.pt\",device='cpu']") == (
+        "sam",
+        {"version": "sam2.1_t.pt", "device": "cpu"},
+    )
 
     # Model with numbers
     assert parse_model("yolo[sampling=5]") == ("yolo", {"sampling": 5})
@@ -24,13 +27,13 @@ def test_split_models():
     assert split_models("yolo;sam") == ["yolo", "sam"]
 
     # With brackets, commas inside brackets are ignored
-    assert split_models("sam[version=sam2.1_t.pt,draw=true],yolo[draw=true]") == [
-        "sam[version=sam2.1_t.pt,draw=true]",
-        "yolo[draw=true]",
+    assert split_models("sam[version=sam2.1_t.pt,sampling=5],yolo[sampling=5]") == [
+        "sam[version=sam2.1_t.pt,sampling=5]",
+        "yolo[sampling=5]",
     ]
 
     # Semi-colons and commas outside
-    assert split_models("sam[version=sam2.1_t.pt,draw=true];yolo") == ["sam[version=sam2.1_t.pt,draw=true]", "yolo"]
+    assert split_models("sam[version=sam2.1_t.pt,sampling=5];yolo") == ["sam[version=sam2.1_t.pt,sampling=5]", "yolo"]
 
 
 @pytest.mark.asyncio
@@ -46,11 +49,10 @@ async def test_add_model_kwargs():
 
         mp.setattr(YoloProvider, "connect", mock_connect)
 
-        m = await conn.add_model("yolo", {"sampling": 150, "draw": True})
+        m = await conn.add_model("yolo", {"sampling": 150})
         assert m is not None
         assert isinstance(m, YoloProvider)
         assert m.sampling_rate == 150
-        assert m.draw_detections is True
 
 
 @pytest.mark.asyncio

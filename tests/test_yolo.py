@@ -59,14 +59,13 @@ class DummyConnection:
 
 
 @pytest.mark.asyncio
-async def test_yolo_provider_draw_detections():
-    """Test YoloProvider draws detections and yields VideoFrames when enabled."""
+async def test_yolo_provider_forwards_frames():
+    """Test YoloProvider yields VideoFrames for every frame sent."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = YoloProvider(name="yolo", connection=conn, draw=True)
+    provider = YoloProvider(name="yolo", connection=conn)
     await provider.connect()
-    assert provider.overlay_enabled is True
 
     # Send a dummy frame
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -92,9 +91,8 @@ async def test_yolo_provider_sampling():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = YoloProvider(name="yolo", connection=conn, draw=True, sampling=5)
+    provider = YoloProvider(name="yolo", connection=conn, sampling=5)
     await provider.connect()
-    assert provider.overlay_enabled is True
     assert provider.sampling_rate == 5
 
     # Mock the actual YOLO model inference to count calls

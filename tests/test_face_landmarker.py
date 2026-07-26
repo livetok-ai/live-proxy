@@ -80,19 +80,18 @@ class DummyConnection:
 
 
 @pytest.mark.asyncio
-async def test_face_landmarker_provider_draw_detections():
-    """Test FaceLandmarkerProvider draws detections and yields VideoFrames when enabled."""
+async def test_face_landmarker_provider_forwards_frames():
+    """Test FaceLandmarkerProvider yields VideoFrames for every frame sent."""
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, draw=True)
+    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn)
 
     with patch("os.path.exists", return_value=True), patch(
         "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
         await provider.connect()
-        assert provider.overlay_enabled is True
 
     # Send a dummy frame with a mocked result
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -120,14 +119,13 @@ async def test_face_landmarker_provider_sampling():
     transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
     conn = DummyConnection([transceiver])
 
-    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, draw=True, sampling=5)
+    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, sampling=5)
 
     with patch("os.path.exists", return_value=True), patch(
         "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
     ) as mock_load:
         mock_load.return_value = MagicMock()
         await provider.connect()
-        assert provider.overlay_enabled is True
         assert provider.sampling_rate == 5
 
     # Mock the actual _detect_emotion to count calls

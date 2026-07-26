@@ -118,7 +118,7 @@ def resolve_model_class(model_name: str):
 
 def parse_model(model_str: str):
     """
-    Parse a model string like 'yolo[sampling=5, draw=1]' into ('yolo', {'sampling': 5, 'draw': 1})
+    Parse a model string like 'yolo[sampling=5, device=cpu]' into ('yolo', {'sampling': 5, 'device': 'cpu'})
     """
     model_str = model_str.strip()
     match = re.match(r"^([^\[]+)\[(.*)\]$", model_str)
@@ -152,7 +152,7 @@ def parse_model(model_str: str):
 def split_models(model_str: str):
     """
     Split model string by comma or semicolon, but only when they are outside of brackets '[...]'.
-    For example: 'sam[version=sam2.1_t.pt,draw=true],yolo[draw=true]' -> ['sam[version=sam2.1_t.pt,draw=true]', 'yolo[draw=true]']
+    For example: 'sam[version=sam2.1_t.pt,sampling=5],yolo[sampling=5]' -> ['sam[version=sam2.1_t.pt,sampling=5]', 'yolo[sampling=5]']
     """
     parts = []
     current = []

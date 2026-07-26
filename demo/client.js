@@ -536,25 +536,25 @@ function buildSessionParams() {
     appendAddon('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    appendAddon(`yolo[draw=false,sampling=${sampling}]`);
+    appendAddon(`yolo[sampling=${sampling}]`);
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
-    appendAddon('face_landmarker[draw=false]');
+    appendAddon('face_landmarker');
   }
   if (document.getElementById('provider-text-sentiment')?.checked) {
     appendAddon('text_sentiment');
   }
   if (document.getElementById('provider-sam2')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,draw=false,sampling=${sampling}]`);
+    appendAddon(`sam[version=sam2.1_t.pt,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-sam3')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,draw=false,sampling=${sampling}]`);
+    appendAddon(`sam[version=sam2.1_t.pt,sampling=${sampling}]`);
   }
   if (document.getElementById('provider-inception')?.checked) {
     appendAddon('inception');
   }
   if (document.getElementById('provider-gemini-robotics')?.checked) {
-    appendAddon(`gemini-robotics[draw=false,sampling=${sampling}]`);
+    appendAddon(`gemini-robotics[sampling=${sampling}]`);
   }
   if (document.getElementById('provider-external-websocket')?.checked) {
     appendAddon('external_websocket');
