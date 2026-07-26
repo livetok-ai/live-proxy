@@ -853,7 +853,7 @@ class Connection:
                         try:
                             self.recorder.add_audio_frame(frame)
                         except Exception as e:
-                            self.info("Error recording audio frame: %s", e)
+                            self.debug("Error recording audio frame: %s", e)
                     if self._session_has_subscribers():
                         self._publish_to_session(SessionEvents.AUDIO, _to_mono(frame))
                     for m in self.models:
@@ -873,7 +873,7 @@ class Connection:
                         try:
                             self.recorder.add_video_frame(frame)
                         except Exception as e:
-                            self.info("Error recording video frame: %s", e)
+                            self.debug("Error recording video frame: %s", e)
                     self._publish_to_session(SessionEvents.VIDEO, frame)
                     has_active_video_models = any(m.supports_video for m in self.models)
                     if not has_active_video_models:

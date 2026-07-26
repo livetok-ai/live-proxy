@@ -14,6 +14,7 @@ import base64
 import json
 import os
 import time
+from fractions import Fraction
 from typing import Optional, cast
 
 import av
@@ -57,12 +58,25 @@ class FileRecorder(Recorder):
         self._container: Optional[av.container.OutputContainer] = av.open(self.path, mode="w")
         self._audio_stream: Optional[AudioStream] = None
         self._video_stream: Optional[VideoStream] = None
+        # Frames received from a live WebRTC track carry RTP-derived pts that
+        # neither start at zero nor share the encoder's time_base. Feeding
+        # those straight to the muxer makes it try (and fail) to rebase the
+        # very first packet to zero time, which then leaves the mp4 writer's
+        # interleaving state broken for every later packet on any stream
+        # (including video, even though video's own pts are otherwise fine).
+        # So each stream gets its own zero-based, monotonically increasing
+        # pts sequence instead of trusting the frame's incoming pts.
+        self._audio_samples = 0
+        self._video_first_pts: Optional[int] = None
 
     def add_audio_frame(self, frame: AudioFrame) -> None:
         if self._container is None:
             return
         if self._audio_stream is None:
             self._audio_stream = cast(AudioStream, self._container.add_stream("aac"))
+        frame.pts = self._audio_samples
+        frame.time_base = Fraction(1, frame.sample_rate)
+        self._audio_samples += frame.samples
         for packet in self._audio_stream.encode(frame):
             self._container.mux(packet)
 
@@ -76,6 +90,11 @@ class FileRecorder(Recorder):
             # open with EINVAL on every subsequent encode() call.
             self._video_stream.width = frame.width - (frame.width % 2)
             self._video_stream.height = frame.height - (frame.height % 2)
+        if frame.pts is None:
+            return
+        if self._video_first_pts is None:
+            self._video_first_pts = frame.pts
+        frame.pts -= self._video_first_pts
         for packet in self._video_stream.encode(frame):
             self._container.mux(packet)
 
