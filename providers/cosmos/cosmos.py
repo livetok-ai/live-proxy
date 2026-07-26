@@ -157,7 +157,7 @@ class CosmosProvider(VisionModel):
         log_info(
             f"Cosmos provider model: {self.model} window: {self.window_seconds}s "
             f"overlap: {self.overlap_seconds}s fps: {self.fps} resolution: {self.resolution} "
-            f"timestamps: {self.add_timestamps}"
+            f"timestamps: {self.add_timestamps} prompt: {self.prompt}"
         )
 
     @property

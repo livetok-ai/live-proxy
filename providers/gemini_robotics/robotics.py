@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 
 from google import genai
 from google.genai import types as genai_types
@@ -37,7 +38,10 @@ class GeminiRoboticsProvider(VisionModel):
         self.client = None
         self.last_detected_Boxes = []
 
-        log_info(f"Gemini Robotics provider model: {self.model} sampling_rate: {self.sampling_rate}")
+        log_info(
+            f"Gemini Robotics provider model: {self.model} sampling_rate: {self.sampling_rate} "
+            f"prompt: {self.prompt}"
+        )
 
     @property
     def is_ready(self) -> bool:
