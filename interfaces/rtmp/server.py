@@ -10,16 +10,13 @@ the connection parameters parsed from the stream key query string
 
 import asyncio
 import os
-import ssl
 import struct
 import urllib.parse
-
-import aiohttp
 
 from interfaces.rtmp import amf
 from interfaces.rtmp.session import RTMPPeerConnection
 from logger import log_debug, log_info, log_trace, log_warn
-from utils import default_connection_params
+from utils import default_connection_params, post_callback
 
 RTMP_VERSION = 3
 HANDSHAKE_SIZE = 1536
@@ -251,7 +248,7 @@ class RTMPClientHandler:
         path = f"{self._app}/{stream_name}" if self._app else stream_name
 
         if self._callback_url:
-            success, params = await self._make_callback(path)
+            success, params = await post_callback(self._callback_url, {"path": path}, context="RTMP:")
             if not success:
                 raise RuntimeError(f"Callback to {self._callback_url} failed")
             params = params or {}
@@ -269,35 +266,6 @@ class RTMPClientHandler:
         self.pc = RTMPPeerConnection(context=f"rtmp:{stream_name}")
         self.pc.notify_connected()
         await self._on_session(self.pc, params)
-
-    async def _make_callback(self, path: str):
-        """Make HTTP callback to retrieve the connection configuration for a publish path.
-
-        Returns (success, response_data), mirroring SIPServer.make_callback."""
-        try:
-            payload = {"path": path}
-            log_info(f"RTMP: making callback to {self._callback_url} with payload: {payload}")
-
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.post(
-                    self._callback_url, json=payload, timeout=aiohttp.ClientTimeout(total=5)
-                ) as response:
-                    log_info(f"RTMP: callback response: {response.status}")
-                    if 200 <= response.status < 300:
-                        try:
-                            return True, await response.json()
-                        except Exception as e:
-                            log_warn(f"RTMP: error parsing callback response: {e}")
-                            return True, {}
-                    return False, None
-        except Exception as e:
-            log_warn(f"RTMP: error making callback to {self._callback_url}: {e}")
-            return False, None
 
     def _send_command(self, name, transaction_id, *args, stream_id=0):
         self._send_message(COMMAND_CSID, MSG_COMMAND_AMF0, stream_id, amf.encode_all(name, transaction_id, *args))

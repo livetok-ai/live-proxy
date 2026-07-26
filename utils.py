@@ -1,20 +1,59 @@
 import asyncio
 import os
+import ssl
+from typing import Optional
 
+import aiohttp
 from PIL import Image
+
+from logger import log_info, log_warn
 
 
 def default_connection_params() -> dict:
-    """Connection parameters from the DEFAULT_MODEL / DEFAULT_SYSTEM_PROMPT / DEFAULT_RECORDING
-    env vars, used to configure SIP/RTMP connections when no callback URL is configured."""
+    """Connection parameters from the DEFAULT_MODEL / DEFAULT_PROMPT / DEFAULT_SYSTEM_PROMPT /
+    DEFAULT_RECORDING env vars, used to configure SIP/RTMP connections when no callback URL is
+    configured."""
     params = {}
-    if os.getenv("DEFAULT_MODEL"):
-        params["model"] = os.getenv("DEFAULT_MODEL")
+    default_model = os.getenv("DEFAULT_MODEL")
+    default_prompt = os.getenv("DEFAULT_PROMPT")
+    if default_model and default_prompt:
+        # Pass the prompt as a model parameter (rather than system_instructions) so
+        # providers like cosmos, which read their prompt from their own kwarg, pick it up.
+        params["model"] = [{"name": default_model, "parameters": {"prompt": default_prompt}}]
+    elif default_model:
+        params["model"] = default_model
     if os.getenv("DEFAULT_SYSTEM_PROMPT"):
         params["system_instructions"] = os.getenv("DEFAULT_SYSTEM_PROMPT")
     if os.getenv("DEFAULT_RECORDING") is not None:
         params["recording"] = parse_bool(os.getenv("DEFAULT_RECORDING"))
     return params
+
+
+async def post_callback(url: str, payload: dict, context: str = "") -> tuple[bool, Optional[dict]]:
+    """POST a JSON payload to a callback URL and return (success, response_data).
+
+    Shared by the RTMP and SIP servers to fetch connection parameters from their
+    configured callback URL when a client connects."""
+    try:
+        log_info(f"making callback to {url} with payload: {payload}", context=context)
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                log_info(f"callback response: {response.status}", context=context)
+                if 200 <= response.status < 300:
+                    try:
+                        return True, await response.json()
+                    except Exception as e:
+                        log_warn(f"error parsing callback response: {e}", context=context)
+                        return True, {}
+                return False, None
+    except Exception as e:
+        log_warn(f"error making callback to {url}: {e}", context=context)
+        return False, None
 
 
 class VideoBuffer:

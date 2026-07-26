@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import re
-import ssl
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional
@@ -10,11 +9,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 if TYPE_CHECKING:
     from connection import Connection
 
-import aiohttp
-
 from logger import log_info
 from network import get_public_ip
-from utils import default_connection_params
+from utils import default_connection_params, post_callback
 
 logger = logging.getLogger(__name__)
 
@@ -356,36 +353,8 @@ class SIPServer:
             logger.warning("No callback URL configured, skipping callback only for testing purposes")
             return True, {}
 
-        try:
-            callback_payload = {"uri": uri, "from": from_uri, "headers": headers}
-
-            logger.info(f"Making callback to {self.callback_url} with payload: {callback_payload}")
-
-            # Create SSL context that doesn't verify certificates
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
-            # Create TCP connector with SSL context
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.post(
-                    self.callback_url, json=callback_payload, timeout=aiohttp.ClientTimeout(total=5)
-                ) as response:
-                    logger.info(f"Callback response: {response.status}")
-                    if 200 <= response.status < 300:
-                        try:
-                            response_data = await response.json()
-                            # logger.info(f"Callback response data: {response_data}")
-                            return True, response_data
-                        except Exception as e:
-                            logger.error(f"Error parsing callback response: {e}")
-                            return True, {}
-                    return False, None
-        except Exception as e:
-            logger.error(f"Error making callback to {self.callback_url}: {e}")
-            return False, None
+        callback_payload = {"uri": uri, "from": from_uri, "headers": headers}
+        return await post_callback(self.callback_url, callback_payload)
 
     async def process_message(self, lines: List[str], body: Optional[str], writer: asyncio.StreamWriter):
         """
