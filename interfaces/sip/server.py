@@ -464,11 +464,12 @@ class SIPServer:
                 api_key = callback_data.get("api_key")
                 callback = callback_data.get("callback")
                 metadata = callback_data.get("metadata")
+                recording = callback_data.get("recording", False)
 
                 logger.info(f"Starting connection with model={model}")
 
                 conn_info = self.connections.create_connection(
-                    callback=callback, metadata=metadata, public_ip=self.host
+                    callback=callback, metadata=metadata, public_ip=self.host, recording=recording
                 )
                 connection = conn_info.connection
 

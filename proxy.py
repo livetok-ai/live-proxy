@@ -439,7 +439,9 @@ async def _on_rtmp_session(pc, params):
     """Called once an RTMP client starts publishing (params parsed from the stream key query string)."""
     log_info(f"RTMP session starting model={params.get('model')} metadata={params.get('metadata')}")
 
-    conn_info = connections.create_connection(callback=params.get("callback"), metadata=params.get("metadata"))
+    conn_info = connections.create_connection(
+        callback=params.get("callback"), metadata=params.get("metadata"), recording=params.get("recording", False)
+    )
     try:
         await conn_info.connection.start_rtmp(
             pc,

@@ -5,13 +5,15 @@ from PIL import Image
 
 
 def default_connection_params() -> dict:
-    """Connection parameters from the DEFAULT_MODEL / DEFAULT_SYSTEM_PROMPT env vars,
-    used to configure SIP/RTMP connections when no callback URL is configured."""
+    """Connection parameters from the DEFAULT_MODEL / DEFAULT_SYSTEM_PROMPT / DEFAULT_RECORDING
+    env vars, used to configure SIP/RTMP connections when no callback URL is configured."""
     params = {}
     if os.getenv("DEFAULT_MODEL"):
         params["model"] = os.getenv("DEFAULT_MODEL")
     if os.getenv("DEFAULT_SYSTEM_PROMPT"):
         params["system_instructions"] = os.getenv("DEFAULT_SYSTEM_PROMPT")
+    if os.getenv("DEFAULT_RECORDING") is not None:
+        params["recording"] = parse_bool(os.getenv("DEFAULT_RECORDING"))
     return params
 
 
