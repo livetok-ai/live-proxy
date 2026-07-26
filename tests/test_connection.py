@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 
 from connection import parse_model, split_models
@@ -235,3 +237,53 @@ def test_broadcast_sip_rtmp():
     assert len(warn_logs_other) == 1
     assert "Could not broadcast: no open data channels" in warn_logs_other[0]
     assert len(trace_logs_other) == 0
+
+
+def test_log_stats_logs_each_model_at_info_level():
+    from connection import Connection
+
+    conn = Connection()
+
+    class FakeModel:
+        def __init__(self, name):
+            self.name = name
+            self.stats = "audio_frames_received=1, video_frames_received=0"
+
+    conn.models = [FakeModel("yolo"), FakeModel("cosmos")]
+
+    info_logs = []
+    conn.info = lambda msg, *args: info_logs.append(msg % args if args else msg)
+
+    conn._log_stats()
+
+    assert len(info_logs) == 2
+    assert "yolo" in info_logs[0] and "audio_frames_received=1" in info_logs[0]
+    assert "cosmos" in info_logs[1]
+
+
+@pytest.mark.asyncio
+async def test_stats_monitor_logs_periodically_until_closed():
+    from connection import Connection
+
+    conn = Connection()
+
+    class FakePc:
+        connectionState = "connected"
+
+    conn.pc = FakePc()
+
+    call_count = 0
+
+    def fake_log_stats():
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            conn.pc.connectionState = "closed"
+
+    conn._log_stats = fake_log_stats
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr("connection.asyncio.sleep", AsyncMock())
+        await conn._stats_monitor()
+
+    assert call_count == 2

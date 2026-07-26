@@ -55,14 +55,18 @@ class GeminiRoboticsProvider(VisionModel):
 
     async def process_frame(self, image: Image):
         width, height = image.width, image.height
-        response = await self.client.aio.models.generate_content(
-            model=self.model,
-            contents=[self.prompt, image],
-            config=genai_types.GenerateContentConfig(
-                temperature=0.5,
-                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
+        start = time.monotonic()
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model,
+                contents=[self.prompt, image],
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.5,
+                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+                ),
+            )
+        finally:
+            self.stats.record_processing_time(time.monotonic() - start)
 
         detections = self._parse_detections(response.text or "", width, height)
 

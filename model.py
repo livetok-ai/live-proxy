@@ -1,4 +1,6 @@
 import asyncio
+import functools
+import time
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, AsyncIterator, Callable, Optional, Union
@@ -19,6 +21,71 @@ class ModelEvents:
     INFERENCE = "inference"
 
 
+def _frame_kind(value: Any) -> Optional[str]:
+    """Classify a send()/recv() payload as one of the three frame kinds tracked
+    in ProviderStats, or None if it's not a countable frame (e.g. None)."""
+    if isinstance(value, AudioFrame):
+        return "audio"
+    if isinstance(value, (VideoFrame, Image)):
+        return "video"
+    if isinstance(value, str):
+        return "data"
+    return None
+
+
+class ProviderStats:
+    """Per-model frame counters plus an average processing-time metric.
+
+    Frame counts are updated automatically around every send()/recv() call
+    (see Model.__init_subclass__), from the provider's own point of view:
+    "received" is input handed to the provider via send(), "sent" is output
+    yielded from recv(). processing_time is populated by providers that run
+    actual inference (see Model.run_shared_inference)."""
+
+    def __init__(self):
+        self.audio_frames_received = 0
+        self.video_frames_received = 0
+        self.data_frames_received = 0
+        self.audio_frames_sent = 0
+        self.video_frames_sent = 0
+        self.data_frames_sent = 0
+        self._processing_seconds_total = 0.0
+        self._processing_count = 0
+
+    def record_received(self, kind: str):
+        setattr(self, f"{kind}_frames_received", getattr(self, f"{kind}_frames_received") + 1)
+
+    def record_sent(self, kind: str):
+        setattr(self, f"{kind}_frames_sent", getattr(self, f"{kind}_frames_sent") + 1)
+
+    def record_processing_time(self, seconds: float):
+        self._processing_seconds_total += seconds
+        self._processing_count += 1
+
+    @property
+    def avg_processing_time_ms(self) -> Optional[float]:
+        if not self._processing_count:
+            return None
+        return (self._processing_seconds_total / self._processing_count) * 1000
+
+    def as_dict(self) -> dict:
+        data = {
+            "audio_frames_received": self.audio_frames_received,
+            "video_frames_received": self.video_frames_received,
+            "data_frames_received": self.data_frames_received,
+            "audio_frames_sent": self.audio_frames_sent,
+            "video_frames_sent": self.video_frames_sent,
+            "data_frames_sent": self.data_frames_sent,
+        }
+        avg = self.avg_processing_time_ms
+        if avg is not None:
+            data["avg_processing_time_ms"] = round(avg, 2)
+        return data
+
+    def __str__(self) -> str:
+        return ", ".join(f"{k}={v}" for k, v in self.as_dict().items())
+
+
 class Model:
     DETECTION_EVENT = "objects_detected"
 
@@ -27,6 +94,41 @@ class Model:
     # Substrings that mark an attribute as sensitive, so it's never exposed via get_properties().
     _SENSITIVE_ATTR_MARKERS = ("key", "token", "secret", "password")
 
+    def __init_subclass__(cls, **kwargs):
+        """Auto-instrument every subclass's own send()/recv() to update
+        ProviderStats counters, without requiring each provider to do it.
+        Only wraps methods defined directly on `cls` (not inherited ones),
+        so a class that doesn't override send/recv keeps its parent's
+        already-instrumented version instead of double-counting."""
+        super().__init_subclass__(**kwargs)
+        if "send" in cls.__dict__:
+            cls.send = Model._instrument_send(cls.__dict__["send"])
+        if "recv" in cls.__dict__:
+            cls.recv = Model._instrument_recv(cls.__dict__["recv"])
+
+    @staticmethod
+    def _instrument_send(func):
+        @functools.wraps(func)
+        async def wrapper(self, input, *args, **kwargs):
+            kind = _frame_kind(input)
+            if kind:
+                self.stats.record_received(kind)
+            return await func(self, input, *args, **kwargs)
+
+        return wrapper
+
+    @staticmethod
+    def _instrument_recv(func):
+        @functools.wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            async for output in func(self, *args, **kwargs):
+                kind = _frame_kind(output)
+                if kind:
+                    self.stats.record_sent(kind)
+                yield output
+
+        return wrapper
+
     def __init__(self, name=None, connection=None, **kwargs):
         self.name = name
         self.connection = connection
@@ -34,6 +136,7 @@ class Model:
         self.input_enabled = True
         self.output_enabled = True
         self._last_detections = None
+        self.stats = ProviderStats()
 
     async def connect(self):
         pass
@@ -168,10 +271,16 @@ class Model:
         """Run a blocking, zero-arg `func` in the default executor, serialized
         against other connections whose provider instance shares the same
         class-level model. Use for any inference call against a `_shared_*`
-        model/processor/reader set up in `setup()`."""
+        model/processor/reader set up in `setup()`. Times the call into
+        `self.stats.avg_processing_time_ms` since this is the common choke
+        point for actual per-frame/per-window inference work."""
         loop = asyncio.get_event_loop()
         async with type(self)._get_shared_inference_semaphore():
-            return await loop.run_in_executor(None, func)
+            start = time.monotonic()
+            try:
+                return await loop.run_in_executor(None, func)
+            finally:
+                self.stats.record_processing_time(time.monotonic() - start)
 
     @abstractmethod
     async def send(self, _input: Input):

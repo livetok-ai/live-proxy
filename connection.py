@@ -275,6 +275,7 @@ class Connection:
         self.system_instructions = None
         self.script = None
         self.timeout_task = None
+        self.stats_task = None
         self.last_message_time = None
         self.start_time = None
         self.transcript = []
@@ -778,6 +779,8 @@ class Connection:
 
         # Start timeout timer
         self.timeout_task = asyncio.create_task(self._timeout_monitor(self.info))
+        # Start periodic stats logging
+        self.stats_task = asyncio.create_task(self._stats_monitor())
 
         @self.pc.on("datachannel")
         def on_datachannel(channel):
@@ -955,6 +958,19 @@ class Connection:
 
         self.info(f"Connection stopped. Transcript: {len(self.transcript)}.")
 
+    STATS_LOG_INTERVAL = 30
+
+    async def _stats_monitor(self):
+        """Log every model's ProviderStats (frame counts, avg processing time)
+        at info level on a fixed interval, for the lifetime of the connection."""
+        while self.pc and self.pc.connectionState != "closed":
+            await asyncio.sleep(self.STATS_LOG_INTERVAL)
+            self._log_stats()
+
+    def _log_stats(self):
+        for m in self.models:
+            self.info(f"Stats for model {m.name}: {m.stats}")
+
     async def _timeout_monitor(self, info):
         """Monitor for timeout - close connection if no messages received for 1 minute
         (or 30 minutes if the connection has no audio track)"""
@@ -987,6 +1003,9 @@ class Connection:
         if self.timeout_task:
             self.timeout_task.cancel()
             self.timeout_task = None
+        if self.stats_task:
+            self.stats_task.cancel()
+            self.stats_task = None
         if self.pc:
             await self.pc.close()
             self.pc = None

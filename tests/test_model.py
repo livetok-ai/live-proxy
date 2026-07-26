@@ -2,6 +2,9 @@ import unittest
 from typing import AsyncIterator
 from unittest.mock import patch
 
+from av import AudioFrame, VideoFrame
+from PIL import Image as PILImage
+
 from model import Input, Model, ModelEvents, Output
 
 
@@ -178,6 +181,84 @@ class TestModelEvents(unittest.TestCase):
         self.assertEqual(len(self.handler_calls), 1)
         self.assertEqual(self.handler_calls[0], ("derived_handler", "derived_data"))
         self.assertEqual(derived.custom_data, "derived")
+
+
+class TestProviderStats(unittest.IsolatedAsyncioTestCase):
+    """Tests for automatic frame counting and processing-time stats."""
+
+    def setUp(self):
+        self.model = MockModel()
+
+    async def test_send_counts_by_frame_kind(self):
+        audio = AudioFrame(format="s16", layout="mono", samples=160)
+        image = PILImage.new("RGB", (4, 4))
+
+        await self.model.send(audio)
+        await self.model.send(image)
+        await self.model.send("hello")
+
+        self.assertEqual(self.model.stats.audio_frames_received, 1)
+        self.assertEqual(self.model.stats.video_frames_received, 1)
+        self.assertEqual(self.model.stats.data_frames_received, 1)
+        self.assertEqual(self.model.sent_inputs, [audio, image, "hello"])
+
+    async def test_recv_counts_by_frame_kind(self):
+        audio = AudioFrame(format="s16", layout="mono", samples=160)
+        video = VideoFrame(width=4, height=4)
+        self.model.recv_outputs = [audio, video]
+
+        outputs = [item async for item in self.model.recv()]
+
+        self.assertEqual(outputs, [audio, video])
+        self.assertEqual(self.model.stats.audio_frames_sent, 1)
+        self.assertEqual(self.model.stats.video_frames_sent, 1)
+
+    async def test_none_input_is_not_counted(self):
+        await self.model.send(None)
+        self.assertEqual(self.model.stats.audio_frames_received, 0)
+        self.assertEqual(self.model.stats.video_frames_received, 0)
+        self.assertEqual(self.model.stats.data_frames_received, 0)
+
+    async def test_subclass_without_override_shares_parent_instrumentation(self):
+        """A subclass that doesn't redefine send/recv should still get counted
+        (via the parent's already-instrumented methods), not skipped."""
+
+        class DerivedModel(MockModel):
+            pass
+
+        derived = DerivedModel()
+        await derived.send("hi")
+        self.assertEqual(derived.stats.data_frames_received, 1)
+
+    async def test_run_shared_inference_records_processing_time(self):
+        def slow():
+            return "result"
+
+        result = await self.model.run_shared_inference(slow)
+
+        self.assertEqual(result, "result")
+        self.assertEqual(self.model.stats._processing_count, 1)
+        self.assertIsNotNone(self.model.stats.avg_processing_time_ms)
+        self.assertGreaterEqual(self.model.stats.avg_processing_time_ms, 0)
+
+    async def test_run_shared_inference_records_time_even_on_error(self):
+        def boom():
+            raise ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            await self.model.run_shared_inference(boom)
+
+        self.assertEqual(self.model.stats._processing_count, 1)
+
+    def test_as_dict_omits_processing_time_when_unset(self):
+        stats = self.model.stats
+        data = stats.as_dict()
+        self.assertNotIn("avg_processing_time_ms", data)
+
+    def test_as_dict_includes_rounded_processing_time_when_set(self):
+        self.model.stats.record_processing_time(0.123456)
+        data = self.model.stats.as_dict()
+        self.assertEqual(data["avg_processing_time_ms"], round(0.123456 * 1000, 2))
 
 
 if __name__ == "__main__":
