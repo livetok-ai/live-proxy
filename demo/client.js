@@ -524,49 +524,58 @@ function enumerateInputDevices() {
 // as the first control frame).
 function buildSessionParams() {
   const modelValue = document.getElementById('model').value;
-  let model = modelValue === 'none' ? '' : modelValue;
+  const models = [];
 
-  const appendAddon = (addon) => {
-    model = model ? model + ';' + addon : addon;
+  const addModel = (name, parameters = {}) => {
+    models.push({ name, parameters });
   };
+
+  const systemInstructions = document.getElementById('system-instructions').value.trim();
+
+  if (modelValue !== 'none') {
+    addModel(modelValue);
+  }
 
   const sampling = Math.max(1, parseInt(document.getElementById('video-sampling')?.value, 10) || 10);
 
   if (document.getElementById('provider-simli')?.checked) {
-    appendAddon('simli');
+    addModel('simli');
   }
   if (document.getElementById('provider-yolo')?.checked) {
-    appendAddon(`yolo[sampling=${sampling}]`);
+    addModel('yolo', { sampling });
   }
   if (document.getElementById('provider-face-landmarker')?.checked) {
-    appendAddon('face_landmarker');
+    addModel('face_landmarker');
   }
   if (document.getElementById('provider-text-sentiment')?.checked) {
-    appendAddon('text_sentiment');
+    addModel('text_sentiment');
   }
   if (document.getElementById('provider-sam2')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,sampling=${sampling}]`);
+    addModel('sam', { version: 'sam2.1_t.pt', sampling });
   }
   if (document.getElementById('provider-sam3')?.checked) {
-    appendAddon(`sam[version=sam2.1_t.pt,sampling=${sampling}]`);
+    addModel('sam', { version: 'sam2.1_t.pt', sampling });
   }
   if (document.getElementById('provider-inception')?.checked) {
-    appendAddon('inception');
+    addModel('inception');
   }
   if (document.getElementById('provider-gemini-robotics')?.checked) {
-    appendAddon(`gemini-robotics[sampling=${sampling}]`);
+    const parameters = { sampling };
+    if (systemInstructions) parameters.prompt = systemInstructions;
+    addModel('gemini-robotics', parameters);
   }
   if (document.getElementById('provider-external-websocket')?.checked) {
-    appendAddon('external_websocket');
+    addModel('external_websocket');
   }
   if (document.getElementById('provider-mujoco')?.checked) {
-    appendAddon('mujoco');
+    addModel('mujoco');
   }
   if (document.getElementById('provider-cosmos')?.checked) {
-    appendAddon(`cosmos[sampling=${sampling}]`);
+    const parameters = { sampling };
+    if (systemInstructions) parameters.prompt = systemInstructions;
+    addModel('cosmos', parameters);
   }
 
-  const systemInstructions = document.getElementById('system-instructions').value.trim();
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
   const language = document.getElementById('language').value;
@@ -579,7 +588,7 @@ function buildSessionParams() {
     tools: tools,
     voice: voice,
     language: language,
-    model: model,
+    model: models,
     metadata: {
       agent_id: '123',
       session_id: '456',

@@ -56,6 +56,36 @@ async def test_add_model_kwargs():
 
 
 @pytest.mark.asyncio
+async def test_prepare_accepts_model_as_list_or_string():
+    """`model` can be passed either as a semicolon/comma-separated string
+    (parsed via split_models/parse_model) or as an array of
+    {"name": ..., "parameters": {...}} objects — both must produce
+    equivalent models with the same parameters applied."""
+    from connection import Connection
+    from providers.yolo import YoloProvider
+
+    async def mock_connect(self):
+        pass
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(YoloProvider, "connect", mock_connect)
+
+        # String format: "name[param=value]"
+        conn_str = Connection()
+        await conn_str._prepare(model="yolo[sampling=7]")
+        assert len(conn_str.models) == 1
+        assert isinstance(conn_str.models[0], YoloProvider)
+        assert conn_str.models[0].sampling_rate == 7
+
+        # Array format: [{"name": ..., "parameters": {...}}]
+        conn_list = Connection()
+        await conn_list._prepare(model=[{"name": "yolo", "parameters": {"sampling": 7}}])
+        assert len(conn_list.models) == 1
+        assert isinstance(conn_list.models[0], YoloProvider)
+        assert conn_list.models[0].sampling_rate == 7
+
+
+@pytest.mark.asyncio
 async def test_connection_run_setup_before_connect():
     from connection import Connection
     from providers.inception import InceptionProvider
