@@ -140,7 +140,8 @@ class TestSessionEndpoints(AioHTTPTestCase):
         data = await resp.json()
 
         entry = next(s for s in data["sessions"] if s["id"] == session.id)
-        assert entry["connections"] == [conn_info.connection.id]
+        assert [c["id"] for c in entry["connections"]] == [conn_info.connection.id]
+        assert entry["connections"][0]["models"] == []
         assert entry["created_at"] > 0
 
         proxy.connections.remove_connection(conn_info)

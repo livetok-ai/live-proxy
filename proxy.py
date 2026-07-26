@@ -175,7 +175,19 @@ class HTTPServer:
                         {
                             "id": session.id,
                             "created_at": int(session.created_at * 1000),
-                            "connections": [connection.id for connection in session.connections],
+                            "connections": [
+                                {
+                                    "id": connection.id,
+                                    "models": [
+                                        {
+                                            "name": model.name,
+                                            "properties": model.get_properties(),
+                                        }
+                                        for model in connection.models
+                                    ],
+                                }
+                                for connection in session.connections
+                            ],
                         }
                         for session in sessions
                     ]

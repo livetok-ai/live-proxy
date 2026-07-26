@@ -1069,9 +1069,10 @@ function renderSessions(sessions) {
     const title = document.createElement('div');
     title.className = 'text-sm font-medium text-primary font-mono';
     title.textContent = session.id.slice(0, 8) + (session.id === currentSessionId ? ' (you)' : '');
+    const modelCount = session.connections.reduce((sum, c) => sum + (c.models ? c.models.length : 0), 0);
     const subtitle = document.createElement('div');
     subtitle.className = 'text-xs text-gray-500';
-    subtitle.textContent = `${session.connections.length} connection${session.connections.length === 1 ? '' : 's'}`;
+    subtitle.textContent = `${session.connections.length} connection${session.connections.length === 1 ? '' : 's'}, ${modelCount} model${modelCount === 1 ? '' : 's'}`;
     info.appendChild(title);
     info.appendChild(subtitle);
     row.appendChild(info);
@@ -1110,6 +1111,85 @@ async function refreshSessions() {
     renderSessions(data.sessions || []);
   } catch (e) {
     renderSessionsError();
+  }
+}
+
+// --- Session connections/models detail (session.html) ---
+
+function renderSessionConnections(containerId, connections) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!connections.length) {
+    const empty = document.createElement('p');
+    empty.className = 'text-sm text-gray-400';
+    empty.textContent = 'No connections.';
+    container.appendChild(empty);
+    return;
+  }
+
+  connections.forEach((connection) => {
+    const card = document.createElement('div');
+    card.className = 'border rounded-lg p-4 bg-gray-50 space-y-2';
+
+    const title = document.createElement('div');
+    title.className = 'text-sm font-medium text-primary font-mono';
+    title.textContent = connection.id;
+    card.appendChild(title);
+
+    if (!connection.models.length) {
+      const noModels = document.createElement('p');
+      noModels.className = 'text-xs text-gray-400 pl-2';
+      noModels.textContent = 'No models loaded.';
+      card.appendChild(noModels);
+    } else {
+      connection.models.forEach((model) => {
+        const modelBlock = document.createElement('div');
+        modelBlock.className = 'pl-4 border-l-2 border-primary/30 space-y-1';
+
+        const modelName = document.createElement('div');
+        modelName.className = 'text-sm font-semibold text-gray-800';
+        modelName.textContent = model.name;
+        modelBlock.appendChild(modelName);
+
+        const propKeys = Object.keys(model.properties || {});
+        if (propKeys.length) {
+          const propsList = document.createElement('dl');
+          propsList.className = 'text-xs text-gray-600 space-y-0.5';
+          propKeys.forEach((key) => {
+            const row = document.createElement('div');
+            row.className = 'flex space-x-2';
+            const dt = document.createElement('dt');
+            dt.className = 'font-medium text-gray-500 shrink-0';
+            dt.textContent = `${key}:`;
+            const dd = document.createElement('dd');
+            dd.className = 'break-all';
+            dd.textContent = String(model.properties[key]);
+            row.appendChild(dt);
+            row.appendChild(dd);
+            propsList.appendChild(row);
+          });
+          modelBlock.appendChild(propsList);
+        }
+
+        card.appendChild(modelBlock);
+      });
+    }
+
+    container.appendChild(card);
+  });
+}
+
+async function refreshSessionConnections(containerId, sessionId) {
+  try {
+    const response = await fetch(`${BASE_URL}/session`);
+    if (!response.ok) return;
+    const data = await response.json();
+    const session = (data.sessions || []).find((s) => s.id === sessionId);
+    renderSessionConnections(containerId, session ? session.connections : []);
+  } catch (e) {
+    // Ignore transient errors and keep the last rendered state.
   }
 }
 
@@ -1197,3 +1277,15 @@ async function joinSession(sessionId) {
 // Poll the active sessions every 10 seconds
 setInterval(refreshSessions, 10000);
 refreshSessions();
+
+// On session.html, poll the connections/models detail for the viewed session.
+if (document.getElementById('session-connections-list')) {
+  const viewedSessionId = new URLSearchParams(window.location.search).get('sessionId');
+  if (viewedSessionId) {
+    refreshSessionConnections('session-connections-list', viewedSessionId);
+    setInterval(() => refreshSessionConnections('session-connections-list', viewedSessionId), 5000);
+  } else {
+    document.getElementById('session-connections-list').innerHTML =
+      '<p class="text-sm text-gray-400">No session ID provided.</p>';
+  }
+}

@@ -21,6 +21,11 @@ class ModelEvents:
 class Model:
     DETECTION_EVENT = "objects_detected"
 
+    # Attributes every Model has that aren't provider-specific configuration.
+    _BASE_ATTRS = {"name", "connection", "input_enabled", "output_enabled"}
+    # Substrings that mark an attribute as sensitive, so it's never exposed via get_properties().
+    _SENSITIVE_ATTR_MARKERS = ("key", "token", "secret", "password")
+
     def __init__(self, name=None, connection=None, **kwargs):
         self.name = name
         self.connection = connection
@@ -31,6 +36,22 @@ class Model:
 
     async def connect(self):
         pass
+
+    def get_properties(self) -> dict:
+        """Return provider-specific configuration for display (e.g. prompt, model version).
+
+        Generically picks up simple scalar attributes set by subclasses, skipping internal
+        state and anything that looks like a credential.
+        """
+        properties = {}
+        for key, value in vars(self).items():
+            if key.startswith("_") or key in self._BASE_ATTRS:
+                continue
+            if any(marker in key.lower() for marker in self._SENSITIVE_ATTR_MARKERS):
+                continue
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                properties[key] = value
+        return properties
 
     @property
     def supports_audio(self) -> bool:
