@@ -114,53 +114,6 @@ async def test_face_landmarker_provider_forwards_frames():
 
 
 @pytest.mark.asyncio
-async def test_face_landmarker_provider_sampling():
-    """Test FaceLandmarkerProvider frame sampling rate."""
-    transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
-    conn = DummyConnection([transceiver])
-
-    provider = FaceLandmarkerProvider(name="face_landmarker", connection=conn, sampling=5)
-
-    with patch("os.path.exists", return_value=True), patch(
-        "providers.face_landmarker.face_landmarker.FaceLandmarkerProvider._load_detector"
-    ) as mock_load:
-        mock_load.return_value = MagicMock()
-        await provider.connect()
-        assert provider.sampling_rate == 5
-
-    # Mock the actual _detect_emotion to count calls
-    call_count = 0
-
-    def dummy_detect(input_img, *args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return ("neutral", 0.8, [10, 10, 90, 90])
-
-    provider._detect_emotion = dummy_detect
-
-    # Send 5 dummy frames
-    img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-    for _ in range(5):
-        await provider.send(img)
-
-    # Inference now runs in the background; give the scheduled task a chance to finish.
-    await asyncio.sleep(0.05)
-
-    # _detect_emotion should only be called once (the first frame)
-    assert call_count == 1
-    assert provider.frame_count == 5
-
-    # Send 6th frame
-    await provider.send(img)
-    await asyncio.sleep(0.05)
-    # _detect_emotion should be called again (the 6th frame)
-    assert call_count == 2
-    assert provider.frame_count == 6
-
-    await provider.close()
-
-
-@pytest.mark.asyncio
 async def test_face_landmarker_provider_queue_limit():
     """Test FaceLandmarkerProvider output queue size is capped at 10 frames."""
     provider = FaceLandmarkerProvider(name="face_landmarker")

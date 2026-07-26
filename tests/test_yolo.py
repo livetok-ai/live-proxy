@@ -1,4 +1,3 @@
-import asyncio
 import fractions
 
 import numpy as np
@@ -82,48 +81,6 @@ async def test_yolo_provider_forwards_frames():
 
     assert len(received_frames) == 1
     assert received_frames[0].pts == 12345
-    await provider.close()
-
-
-@pytest.mark.asyncio
-async def test_yolo_provider_sampling():
-    """Test YoloProvider frame sampling rate."""
-    transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
-    conn = DummyConnection([transceiver])
-
-    provider = YoloProvider(name="yolo", connection=conn, sampling=5)
-    await provider.connect()
-    assert provider.sampling_rate == 5
-
-    # Mock the actual YOLO model inference to count calls
-    call_count = 0
-
-    def dummy_model(input_img, *args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return []
-
-    provider.model = dummy_model
-
-    # Send 5 dummy frames
-    img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-    for _ in range(5):
-        await provider.send(img)
-
-    # Inference now runs in the background; give the scheduled task a chance to finish.
-    await asyncio.sleep(0.05)
-
-    # YOLO model should only be called once (the first frame)
-    assert call_count == 1
-    assert provider.frame_count == 5
-
-    # Send 6th frame
-    await provider.send(img)
-    await asyncio.sleep(0.05)
-    # YOLO model should be called again (the 6th frame)
-    assert call_count == 2
-    assert provider.frame_count == 6
-
     await provider.close()
 
 

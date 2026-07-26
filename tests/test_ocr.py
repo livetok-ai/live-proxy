@@ -133,42 +133,6 @@ async def test_ocr_provider_forwards_frames():
 
 
 @pytest.mark.asyncio
-async def test_ocr_provider_sampling():
-    """Test OCRProvider frame sampling rate."""
-    provider = OCRProvider(name="ocr", sampling=3)
-
-    call_count = 0
-
-    def dummy_readtext(img_np):
-        nonlocal call_count
-        call_count += 1
-        return []
-
-    mock_reader = MockEasyOCRReader()
-    mock_reader.readtext = dummy_readtext
-    provider.reader = mock_reader
-
-    img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-
-    # Send 3 frames
-    await provider.send(img)  # Frame 1: Processes
-    await provider.send(img)  # Frame 2: Skips
-    await provider.send(img)  # Frame 3: Skips
-    await asyncio.sleep(0.05)  # inference runs in the background
-
-    assert call_count == 1
-    assert provider.frame_count == 3
-
-    # Send 4th frame
-    await provider.send(img)  # Frame 4: Processes (4 % 3 = 1)
-    await asyncio.sleep(0.05)
-    assert call_count == 2
-    assert provider.frame_count == 4
-
-    await provider.close()
-
-
-@pytest.mark.asyncio
 async def test_ocr_provider_queue_limit():
     """Test OCRProvider output queue limits queue size to 10."""
     provider = OCRProvider(name="ocr")

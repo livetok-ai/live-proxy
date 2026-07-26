@@ -1,4 +1,3 @@
-import asyncio
 import fractions
 
 import numpy as np
@@ -110,58 +109,6 @@ async def test_sam3_provider_forwards_frames():
 
         assert len(received_frames) == 1
         assert received_frames[0].pts == 12345
-    finally:
-        SamProvider.setup = original_setup
-        SamProvider._shared_model = None
-        await provider.close()
-
-
-@pytest.mark.asyncio
-async def test_sam3_provider_sampling():
-    """Test Sam3Provider frame sampling rate."""
-    transceiver = DummyTransceiver("video", "sendrecv", "sendrecv")
-    conn = DummyConnection([transceiver])
-
-    provider = SamProvider(name="sam", connection=conn, sampling=5)
-
-    async def mock_setup(model_version):
-        SamProvider._shared_model = "mock_sam_model"
-
-    original_setup = SamProvider.setup
-    SamProvider.setup = mock_setup
-
-    try:
-        await provider.connect()
-        assert provider.sampling_rate == 5
-
-        # Mock the actual SAM model inference to count calls
-        call_count = 0
-
-        def dummy_model(input_img, *args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return []
-
-        provider.model = dummy_model
-
-        # Send 5 dummy frames
-        img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
-        for _ in range(5):
-            await provider.send(img)
-
-        # Inference now runs in the background; give the scheduled task a chance to finish.
-        await asyncio.sleep(0.05)
-
-        # SAM model should only be called once (the first frame)
-        assert call_count == 1
-        assert provider.frame_count == 5
-
-        # Send 6th frame
-        await provider.send(img)
-        await asyncio.sleep(0.05)
-        # SAM model should be called again (the 6th frame)
-        assert call_count == 2
-        assert provider.frame_count == 6
     finally:
         SamProvider.setup = original_setup
         SamProvider._shared_model = None

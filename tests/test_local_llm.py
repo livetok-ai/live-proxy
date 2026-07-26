@@ -30,7 +30,6 @@ async def test_local_llm_provider_connect():
     with patch("transformers.AutoTokenizer.from_pretrained", return_value=mock_tokenizer) as mock_tok_load, patch(
         "transformers.AutoModelForCausalLM.from_pretrained", return_value=mock_model
     ) as mock_model_load:
-
         await provider.connect()
 
         assert provider.tokenizer == mock_tokenizer
@@ -82,7 +81,6 @@ async def test_local_llm_provider_generation():
     with patch("providers.local_llm.local_llm.TextIteratorStreamer", MockStreamer), patch(
         "providers.local_llm.local_llm.Thread"
     ):
-
         # Trigger send
         await provider.send("Hi there")
 
