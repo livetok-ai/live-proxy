@@ -3,6 +3,16 @@
 ## Project Overview
 Live-proxy is an opensource proxy service for interacting with large language model (LLM) WebSocket APIs exposing other interfaces that are better suited for real-time use cases over the Internet. It supports Gemini, OpenAI, and Bedrock speech-to-speech models and facilitates real-time communication using WebRTC and WebTransport.
 
+## Before Every Commit
+
+**IMPORTANT: Always run the following, in order, before creating a git commit in this repo, and fix any formatting changes, lint errors, or test failures before committing:**
+
+```bash
+black .
+ruff check .
+pytest
+```
+
 ## Development Requirements
 
 ### Python Version
