@@ -60,11 +60,46 @@ class VisionModel(Model):
         self.output_queue = asyncio.Queue()
         self._processing = False
         self._pending_frame = None
+        self._load_task = None
 
     @property
     def is_ready(self) -> bool:
         """Whether the provider has finished connecting and can process frames."""
         return True
+
+    async def connect(self):
+        """Kick off `load()` in the background instead of awaiting it here.
+
+        Many vision providers load a local model (onto disk and/or GPU),
+        which can take seconds. Connection.start()/_prepare() awaits
+        connect() for every model before it starts reading input for this
+        connection at all — for an RTMP publish, that means the publisher's
+        socket isn't being drained while the model loads, so its buffer fills
+        up and the stream drops before a single frame is processed. Running
+        `load()` in the background lets input start flowing immediately;
+        frames are simply dropped by `send()` (via `is_ready`) until loading
+        finishes.
+        """
+        self._load_task = asyncio.ensure_future(self._run_load())
+
+    async def _run_load(self):
+        try:
+            await self.load()
+        except Exception as e:
+            log_info(f"{type(self).__name__} failed to load: {e}", context=self._log_context)
+
+    async def load(self):
+        """Override to perform the (possibly slow) model/connection setup
+        that used to live in `connect()`. Runs in the background — check
+        `is_ready` before depending on whatever state this sets up."""
+        pass
+
+    async def wait_until_loaded(self):
+        """Wait for the background load kicked off by connect() to finish.
+        Callers (mainly tests) that need `is_ready` state right after
+        connecting should await this instead of assuming connect() blocks."""
+        if self._load_task is not None:
+            await self._load_task
 
     def get_color(self, label: str):
         return color_for_label(label)

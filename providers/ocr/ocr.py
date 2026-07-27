@@ -70,7 +70,7 @@ class OCRProvider(VisionModel):
     def is_ready(self) -> bool:
         return self.reader is not None
 
-    async def connect(self):
+    async def load(self):
         if easyocr is None:
             log_warn("Cannot connect OCR provider because EasyOCR is not installed.")
             return

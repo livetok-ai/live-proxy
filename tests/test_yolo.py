@@ -19,6 +19,7 @@ async def test_yolo_provider_connect():
     """Test YoloProvider connect and model loading."""
     provider = YoloProvider(name="yolo")
     await provider.connect()
+    await provider.wait_until_loaded()
     assert provider.model is not None
     await provider.close()
 
@@ -28,6 +29,7 @@ async def test_yolo_provider_send_frame():
     """Test YoloProvider processing and logging of dummy frames."""
     provider = YoloProvider(name="yolo")
     await provider.connect()
+    await provider.wait_until_loaded()
 
     # Create a 100x100 dummy black image
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -65,6 +67,7 @@ async def test_yolo_provider_forwards_frames():
 
     provider = YoloProvider(name="yolo", connection=conn)
     await provider.connect()
+    await provider.wait_until_loaded()
 
     # Send a dummy frame
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -89,6 +92,7 @@ async def test_yolo_provider_queue_limit():
     """Test YoloProvider output queue size is capped at 10 frames."""
     provider = YoloProvider(name="yolo")
     await provider.connect()
+    await provider.wait_until_loaded()
 
     # Enable output to queue frames
     provider.output_enabled = True

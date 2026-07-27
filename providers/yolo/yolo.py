@@ -47,7 +47,7 @@ class YoloProvider(VisionModel):
     def is_ready(self) -> bool:
         return self.model is not None
 
-    async def connect(self):
+    async def load(self):
         if YoloProvider._shared_model is None:
             await YoloProvider.setup()
 

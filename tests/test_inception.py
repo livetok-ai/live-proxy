@@ -21,6 +21,7 @@ async def test_inception_provider_connect():
     """Test InceptionProvider connect and model loading."""
     provider = InceptionProvider(name="inception")
     await provider.connect()
+    await provider.wait_until_loaded()
 
     assert provider.mtcnn is not None
     assert provider.resnet is not None
@@ -33,6 +34,7 @@ async def test_inception_provider_send_frame_no_face():
     """Test InceptionProvider with dummy frame containing no face."""
     provider = InceptionProvider(name="inception")
     await provider.connect()
+    await provider.wait_until_loaded()
 
     # Create a 160x160 dummy black image (contains no face)
     img = Image.fromarray(np.zeros((160, 160, 3), dtype=np.uint8))
@@ -58,6 +60,7 @@ async def test_inception_provider_send_frame_with_face_mocked():
     """Test InceptionProvider emits inference/faces_detected events when face is detected (mocked)."""
     provider = InceptionProvider(name="inception")
     await provider.connect()
+    await provider.wait_until_loaded()
 
     # Mock MTCNN and ResNet models so they return deterministic values instantly
     dummy_face_tensor = torch.zeros(3, 160, 160)
@@ -94,6 +97,7 @@ async def test_inception_provider_sampling():
     """Test InceptionProvider frame sampling rate."""
     provider = InceptionProvider(name="inception", sampling=3)
     await provider.connect()
+    await provider.wait_until_loaded()
 
     assert provider.sampling_rate == 3
 

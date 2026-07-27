@@ -27,6 +27,7 @@ async def test_face_landmarker_provider_connect():
     ) as mock_load:
         mock_load.return_value = MagicMock()
         await provider.connect()
+        await provider.wait_until_loaded()
         assert provider.detector is not None
         mock_load.assert_called_once()
 
@@ -92,6 +93,7 @@ async def test_face_landmarker_provider_forwards_frames():
     ) as mock_load:
         mock_load.return_value = MagicMock()
         await provider.connect()
+        await provider.wait_until_loaded()
 
     # Send a dummy frame with a mocked result
     img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))

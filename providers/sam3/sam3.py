@@ -36,7 +36,7 @@ class SamProvider(VisionModel):
     def is_ready(self) -> bool:
         return self.model is not None
 
-    async def connect(self):
+    async def load(self):
         # Setup the shared model
         await SamProvider.setup(self.model_version)
         self.model = SamProvider._shared_model

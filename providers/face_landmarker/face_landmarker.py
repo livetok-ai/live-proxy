@@ -67,7 +67,7 @@ class FaceLandmarkerProvider(VisionModel):
         }
         return colors.get(label, (0, 206, 209))
 
-    async def connect(self):
+    async def load(self):
         if FaceLandmarkerProvider._shared_model_path is None or not os.path.exists(
             FaceLandmarkerProvider._shared_model_path
         ):

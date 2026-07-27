@@ -32,6 +32,7 @@ async def test_sam3_provider_connect():
 
     try:
         await provider.connect()
+        await provider.wait_until_loaded()
         assert called is True
         assert provider.model == "mock_sam_model"
         assert provider.model_version == "sam2.1_t.pt"
@@ -78,6 +79,7 @@ async def test_sam3_provider_forwards_frames():
 
     try:
         await provider.connect()
+        await provider.wait_until_loaded()
 
         # Send a dummy frame
         img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
@@ -128,6 +130,7 @@ async def test_sam3_provider_queue_limit():
 
     try:
         await provider.connect()
+        await provider.wait_until_loaded()
 
         # Enable output to queue frames
         provider.output_enabled = True

@@ -169,7 +169,7 @@ class CosmosProvider(VisionModel):
         """Seconds between consecutive window dispatches."""
         return self.window_seconds - self.overlap_seconds
 
-    async def connect(self):
+    async def load(self):
         await CosmosProvider.setup(self.model)
         self.processor = CosmosProvider._shared_processor
         self._model_instance = CosmosProvider._shared_model

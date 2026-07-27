@@ -56,16 +56,32 @@ class InceptionProvider(Model):
         self.frame_count = 0
         self.last_process_time = 0.0
         self.input_enabled = True
+        self._load_task = None
         log_info(f"Inception provider model: {self.model} sampling_rate: {self.sampling_rate}")
 
     async def connect(self):
+        """Kick off model loading in the background so it doesn't block the
+        caller (e.g. an RTMP publish handshake) while FaceNet loads — see
+        VisionModel.connect() for the same pattern used by the other vision
+        providers."""
+        self._load_task = asyncio.ensure_future(self._load())
 
-        if InceptionProvider._shared_resnet is None:
-            await InceptionProvider.setup()
+    async def _load(self):
+        try:
+            if InceptionProvider._shared_resnet is None:
+                await InceptionProvider.setup()
 
-        self.device = InceptionProvider._shared_device
-        self.mtcnn = InceptionProvider._shared_mtcnn
-        self.resnet = InceptionProvider._shared_resnet
+            self.device = InceptionProvider._shared_device
+            self.mtcnn = InceptionProvider._shared_mtcnn
+            self.resnet = InceptionProvider._shared_resnet
+        except Exception as e:
+            log_info(f"Inception provider failed to load: {e}")
+
+    async def wait_until_loaded(self):
+        """Wait for the background load kicked off by connect() to finish
+        (mainly useful in tests that need state set by load() right away)."""
+        if self._load_task is not None:
+            await self._load_task
 
     async def send(self, input: Input):
         if not self.resnet:
