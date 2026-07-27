@@ -49,6 +49,8 @@ class ProviderStats:
         self.audio_frames_sent = 0
         self.video_frames_sent = 0
         self.data_frames_sent = 0
+        self.video_processed_count = 0
+        self.audio_processed_count = 0
         self._processing_seconds_total = 0.0
         self._processing_count = 0
 
@@ -58,12 +60,13 @@ class ProviderStats:
     def record_sent(self, kind: str):
         setattr(self, f"{kind}_frames_sent", getattr(self, f"{kind}_frames_sent") + 1)
 
-    def record_processing_time(self, seconds: float):
+    def record_processing_time(self, seconds: float, kind: str = "video"):
         self._processing_seconds_total += seconds
         self._processing_count += 1
+        setattr(self, f"{kind}_processed_count", getattr(self, f"{kind}_processed_count") + 1)
 
     @property
-    def avg_processing_time_ms(self) -> Optional[float]:
+    def video_processed_avg_time(self) -> Optional[float]:
         if not self._processing_count:
             return None
         return (self._processing_seconds_total / self._processing_count) * 1000
@@ -76,10 +79,12 @@ class ProviderStats:
             "audio_frames_sent": self.audio_frames_sent,
             "video_frames_sent": self.video_frames_sent,
             "data_frames_sent": self.data_frames_sent,
+            "video_processed_count": self.video_processed_count,
+            "audio_processed_count": self.audio_processed_count,
         }
-        avg = self.avg_processing_time_ms
+        avg = self.video_processed_avg_time
         if avg is not None:
-            data["avg_processing_time_ms"] = round(avg, 2)
+            data["video_processed_avg_time"] = round(avg, 2)
         return data
 
     def __str__(self) -> str:
@@ -272,7 +277,7 @@ class Model:
         against other connections whose provider instance shares the same
         class-level model. Use for any inference call against a `_shared_*`
         model/processor/reader set up in `setup()`. Times the call into
-        `self.stats.avg_processing_time_ms` since this is the common choke
+        `self.stats.video_processed_avg_time` since this is the common choke
         point for actual per-frame/per-window inference work."""
         loop = asyncio.get_event_loop()
         async with type(self)._get_shared_inference_semaphore():

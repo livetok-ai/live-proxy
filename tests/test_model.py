@@ -238,8 +238,9 @@ class TestProviderStats(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, "result")
         self.assertEqual(self.model.stats._processing_count, 1)
-        self.assertIsNotNone(self.model.stats.avg_processing_time_ms)
-        self.assertGreaterEqual(self.model.stats.avg_processing_time_ms, 0)
+        self.assertEqual(self.model.stats.video_processed_count, 1)
+        self.assertIsNotNone(self.model.stats.video_processed_avg_time)
+        self.assertGreaterEqual(self.model.stats.video_processed_avg_time, 0)
 
     async def test_run_shared_inference_records_time_even_on_error(self):
         def boom():
@@ -253,12 +254,14 @@ class TestProviderStats(unittest.IsolatedAsyncioTestCase):
     def test_as_dict_omits_processing_time_when_unset(self):
         stats = self.model.stats
         data = stats.as_dict()
-        self.assertNotIn("avg_processing_time_ms", data)
+        self.assertNotIn("video_processed_avg_time", data)
 
     def test_as_dict_includes_rounded_processing_time_when_set(self):
         self.model.stats.record_processing_time(0.123456)
         data = self.model.stats.as_dict()
-        self.assertEqual(data["avg_processing_time_ms"], round(0.123456 * 1000, 2))
+        self.assertEqual(data["video_processed_avg_time"], round(0.123456 * 1000, 2))
+        self.assertEqual(data["video_processed_count"], 1)
+        self.assertEqual(data["audio_processed_count"], 0)
 
 
 if __name__ == "__main__":
