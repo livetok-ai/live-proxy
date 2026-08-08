@@ -43,6 +43,7 @@ from interfaces.sip import SIPServer
 from interfaces.websocket import WebSocketServer
 from interfaces.webtransport import WebTransportServer
 from logger import log_info, log_warn
+from registration import Registration
 from session import SessionManager
 
 
@@ -497,6 +498,7 @@ async def run_servers(
     global webtransport_server, websocket_server
 
     http_server = HTTPServer(host=host, port=port, ssl_context=ssl_context)
+    registration = Registration(host=host, port=port)
     sip_server = SIPServer(host=sip_host, port=sip_port, callback_url=sip_callback_url)
     webtransport_server = WebTransportServer(
         host=wt_host,
@@ -529,6 +531,7 @@ async def run_servers(
             webtransport_server.start(),
             websocket_server.start(),
             rtmp_server.start(),
+            registration.run(),
         )
     except Exception as e:
         log_info(f"Error running servers: {e}")
