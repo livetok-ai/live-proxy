@@ -48,7 +48,7 @@ class GeminiRoboticsLiveProvider(VisionModel):
         ):
             self.model = DEFAULT_MODEL
 
-        self.prompt = kwargs.get("prompt") or DEFAULT_PROMPT
+        self.prompt = kwargs.get("prompt") or (connection.system_instructions if connection else None) or DEFAULT_PROMPT
         self.api_key = kwargs.get("api_key") or os.getenv("GOOGLE_API_KEY")
 
         self.client = None

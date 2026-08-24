@@ -34,7 +34,7 @@ class GeminiRoboticsProvider(VisionModel):
         if not self.model or self.model in ("gemini_robotics", "gemini-robotics", "robotics"):
             self.model = DEFAULT_MODEL
 
-        self.prompt = kwargs.get("prompt") or DEFAULT_PROMPT
+        self.prompt = kwargs.get("prompt") or (connection.system_instructions if connection else None) or DEFAULT_PROMPT
         self.api_key = (
             kwargs.get("api_key") or (connection.api_key if connection else None) or os.getenv("GOOGLE_API_KEY")
         )

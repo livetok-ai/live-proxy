@@ -78,7 +78,8 @@ def _patch_accelerate_disk_offload():
         meta_state_dict = model.state_dict()
         param_device_map = expand_device_map(device_map, meta_state_dict.keys())
         weight_map = {
-            k: next((f for f in checkpoint_files if f.endswith(v)), None) for k, v in sharded_metadata["weight_map"].items()
+            k: next((f for f in checkpoint_files if f.endswith(v)), None)
+            for k, v in sharded_metadata["weight_map"].items()
         }
 
         weight_renaming_map = {
@@ -185,7 +186,12 @@ class CosmosProvider(VisionModel):
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.model = kwargs.get("model") or os.getenv("COSMOS_MODEL") or DEFAULT_MODEL
-        self.prompt = kwargs.get("prompt") or os.getenv("COSMOS_PROMPT") or DEFAULT_PROMPT
+        self.prompt = (
+            kwargs.get("prompt")
+            or (connection.system_instructions if connection else None)
+            or os.getenv("COSMOS_PROMPT")
+            or DEFAULT_PROMPT
+        )
 
         self.window_seconds = parse_int(
             kwargs.get("window"), parse_int(os.getenv("COSMOS_WINDOW_SECONDS"), DEFAULT_WINDOW_SECONDS)
