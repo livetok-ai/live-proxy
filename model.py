@@ -259,6 +259,14 @@ class Model:
         """Perform any heavy initialization or model downloading needed before use."""
         pass
 
+    @staticmethod
+    def is_available() -> bool:
+        """Whether this provider can be used right now without per-request
+        credentials (e.g. a required API key is set via environment variable).
+        Local models that need no credentials are always available. Used to
+        advertise which models this instance supports (see registration.py)."""
+        return True
+
     @classmethod
     def _get_shared_inference_semaphore(cls) -> asyncio.Semaphore:
         """Per-class semaphore serializing calls to a model instance that's shared

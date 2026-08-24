@@ -1,3 +1,4 @@
+import asyncio
 import fractions
 
 import numpy as np
@@ -5,6 +6,17 @@ import pytest
 from PIL import Image
 
 from providers.sam3 import SamProvider
+
+
+async def _wait_until_idle(provider, timeout=2.0):
+    """process_frame() runs in a background task (see VisionModel.send); poll until
+    it (and any chained pending frame) finishes instead of racing it."""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while provider._processing:
+        if loop.time() > deadline:
+            raise AssertionError("timed out waiting for SamProvider to finish processing")
+        await asyncio.sleep(0.01)
 
 
 @pytest.mark.asyncio
@@ -111,6 +123,85 @@ async def test_sam3_provider_forwards_frames():
 
         assert len(received_frames) == 1
         assert received_frames[0].pts == 12345
+    finally:
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_sam3_provider_point_prompt():
+    """process_frame should pass a single point prompt (defaulting to frame center,
+    overridable via a 'pointer' control message) instead of running SAM with no
+    prompt at all, which triggers ultralytics' much slower automatic segmentation."""
+    provider = SamProvider(name="sam", sampling=1)
+
+    async def mock_setup(model_version):
+        SamProvider._shared_model = "mock_sam_model"
+
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
+
+    try:
+        await provider.connect()
+        await provider.wait_until_loaded()
+
+        captured_kwargs = {}
+
+        def dummy_model(input_img, *args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return []
+
+        provider.model = dummy_model
+
+        img = Image.fromarray(np.zeros((100, 200, 3), dtype=np.uint8))  # width=200, height=100
+        await provider.send(img)
+        await _wait_until_idle(provider)
+        assert captured_kwargs["points"] == [[100.0, 50.0]]
+        assert captured_kwargs["labels"] == [1]
+
+        # A pointer control message overrides the default center point.
+        await provider.send('{"type": "pointer", "x": 0.25, "y": 0.75}')
+        await provider.send(img)
+        await _wait_until_idle(provider)
+        assert captured_kwargs["points"] == [[50.0, 75.0]]
+
+        # pointer_clear resets back to the default center point.
+        await provider.send('{"type": "pointer_clear"}')
+        await provider.send(img)
+        await _wait_until_idle(provider)
+        assert captured_kwargs["points"] == [[100.0, 50.0]]
+    finally:
+        SamProvider.setup = original_setup
+        SamProvider._shared_model = None
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_sam3_provider_stats_not_double_counted():
+    """SamProvider overrides send() to intercept control-message strings; make sure
+    that override doesn't cause video frames routed through it to be counted twice
+    in ProviderStats (see Model.__init_subclass__ instrumentation)."""
+    provider = SamProvider(name="sam")
+
+    async def mock_setup(model_version):
+        SamProvider._shared_model = "mock_sam_model"
+
+    original_setup = SamProvider.setup
+    SamProvider.setup = mock_setup
+
+    try:
+        await provider.connect()
+        await provider.wait_until_loaded()
+        provider.model = lambda input_img, *args, **kwargs: []
+
+        img = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+        await provider.send(img)
+        assert provider.stats.video_frames_received == 1
+
+        await provider.send('{"type": "pointer_clear"}')
+        assert provider.stats.data_frames_received == 1
+        assert provider.stats.video_frames_received == 1
     finally:
         SamProvider.setup = original_setup
         SamProvider._shared_model = None

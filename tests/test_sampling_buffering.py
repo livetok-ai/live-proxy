@@ -65,7 +65,7 @@ def test_provider_capabilities():
     gemini = GeminiProvider()
     assert gemini.supports_audio is True
     assert gemini.supports_text is True
-    assert gemini.supports_video is False
+    assert gemini.supports_video is True
 
     # OpenAI
     openai = OpenAIProvider()

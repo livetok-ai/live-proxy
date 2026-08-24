@@ -14,6 +14,15 @@ except ImportError:
 LOADED_SCRIPTS = []
 
 
+def _wrap_script_if_needed(code: str) -> str:
+    """If the script's first non-empty line doesn't mention "setup", assume
+    it's a bare body (no top-level setup() function) and wrap it in one."""
+    first_non_empty = next((line for line in code.splitlines() if line.strip()), None)
+    if first_non_empty is not None and "setup" not in first_non_empty:
+        return f"function setup(connection) {{\n{code}\n}}"
+    return code
+
+
 class JavaScriptScript:
     def __init__(self, file_path=None, code=None, name="dynamic_script.js"):
         self.file_path = file_path
@@ -23,7 +32,7 @@ class JavaScriptScript:
             with open(file_path, encoding="utf-8") as f:
                 self.code = f.read()
         else:
-            self.code = code or ""
+            self.code = _wrap_script_if_needed(code or "")
         self.contexts = {}  # connection.id -> (ctx, callbacks)
 
         # Automatically generate PascalCase script prefix based on script filename
@@ -65,6 +74,12 @@ class JavaScriptScript:
             return None
 
         ctx.add_callable("py_connection_add_model", py_connection_add_model)
+
+        def py_connection_get_first_model():
+            m = connection.get_first_enabled_model()
+            return m.name if m else None
+
+        ctx.add_callable("py_connection_get_first_model", py_connection_get_first_model)
         ctx.add_callable("py_connection_send_data", lambda data_str: connection._send_raw_json(data_str))
 
         def py_connection_close():
@@ -372,6 +387,16 @@ class JavaScriptScript:
             add_model(name, kwargs) {
                 py_connection_add_model(name, kwargs ? JSON.stringify(kwargs) : null);
                 return this.get_model(name);
+            }
+            getModel() {
+                const name = py_connection_get_first_model();
+                if (!name) {
+                    return null;
+                }
+                if (!this._models[name]) {
+                    this._models[name] = new ModelWrapper(name);
+                }
+                return this._models[name];
             }
             send_data(data) {
                 py_connection_send_data(JSON.stringify(data));

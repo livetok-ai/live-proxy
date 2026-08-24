@@ -34,6 +34,81 @@ DEFAULT_MAX_TOKENS = 1024
 # Reasoning models emit an optional <think>...</think> block before the answer.
 THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
+_disk_offload_patched = False
+
+
+def _patch_accelerate_disk_offload():
+    """Work around a transformers bug (present through at least 5.15.1 and
+    current main) that corrupts disk-offload paths for checkpoints whose
+    safetensors index stores shard names with an embedded subfolder prefix,
+    like Cosmos3-Nano's "transformer/diffusion_pytorch_model-*.safetensors"
+    entries. `accelerate_disk_offload` rebuilds each shard path as
+    `dirname(checkpoint_files[0]) + weight_map_value`, but checkpoint_files[0]
+    already ends in ".../transformer", so the rebuilt path doubles it to
+    ".../transformer/transformer/...", which doesn't exist on disk. This only
+    bites once a model is too big to fit in RAM/VRAM and needs disk offload,
+    so it's easy to miss until generate() actually reads an offloaded layer.
+    Instead of reconstructing the path from a prefix, we match each raw
+    weight_map value against the already-correctly-resolved checkpoint file
+    list by suffix."""
+    global _disk_offload_patched
+    if _disk_offload_patched:
+        return
+
+    import transformers.modeling_utils as modeling_utils
+    from transformers.core_model_loading import WeightRenaming, rename_source_key
+    from transformers.integrations.accelerate import expand_device_map
+
+    original = modeling_utils.accelerate_disk_offload
+
+    def patched_accelerate_disk_offload(
+        model, disk_offload_folder, checkpoint_files, device_map, sharded_metadata, weight_mapping=None
+    ):
+        is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
+        if not is_offloaded_safetensors or sharded_metadata is None:
+            return original(model, disk_offload_folder, checkpoint_files, device_map, sharded_metadata, weight_mapping)
+
+        if disk_offload_folder is not None:
+            os.makedirs(disk_offload_folder, exist_ok=True)
+
+        renamings = []
+        if weight_mapping is not None:
+            renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+
+        meta_state_dict = model.state_dict()
+        param_device_map = expand_device_map(device_map, meta_state_dict.keys())
+        weight_map = {
+            k: next((f for f in checkpoint_files if f.endswith(v)), None) for k, v in sharded_metadata["weight_map"].items()
+        }
+
+        weight_renaming_map = {
+            rename_source_key(
+                k, renamings, [], base_model_prefix=model.base_model_prefix, meta_state_dict=meta_state_dict
+            )[0]: k
+            for k in weight_map
+        }
+
+        disk_offload_index = {
+            target_name: {
+                "safetensors_file": weight_map[source_name],
+                "weight_name": source_name,
+                "dtype": str(meta_state_dict[target_name].dtype).removeprefix("torch."),
+            }
+            for target_name, source_name in weight_renaming_map.items()
+            if target_name in param_device_map and param_device_map[target_name] == "disk"
+        }
+
+        all_tied_weights_keys = getattr(model, "all_tied_weights_keys", {})
+        for target_param_name, source_param_name in all_tied_weights_keys.items():
+            if source_param_name in disk_offload_index and target_param_name not in disk_offload_index:
+                disk_offload_index[target_param_name] = disk_offload_index[source_param_name]
+
+        return disk_offload_index
+
+    modeling_utils.accelerate_disk_offload = patched_accelerate_disk_offload
+    _disk_offload_patched = True
+    log_info("Patched transformers accelerate_disk_offload to fix duplicated subfolder paths")
+
 
 class CosmosProvider(VisionModel):
     """Provider for NVIDIA Cosmos, run locally through transformers. Cosmos has
@@ -67,6 +142,7 @@ class CosmosProvider(VisionModel):
             start = time.monotonic()
 
             def _load():
+                _patch_accelerate_disk_offload()
                 processor = AutoProcessor.from_pretrained(model_id)
                 model = Cosmos3OmniForConditionalGeneration.from_pretrained(
                     model_id,
@@ -301,3 +377,32 @@ class CosmosProvider(VisionModel):
         self.processor = None
         self._model_instance = None
         self.clear_overlay()
+
+
+async def _main():
+    """Standalone smoke test: loads the real model and runs one window of
+    inference on a couple of synthetic frames, bypassing the WebRTC/connection
+    stack entirely. Run with: python -m providers.cosmos.cosmos"""
+    from PIL import Image as PILImage
+
+    provider = CosmosProvider()
+    await provider.load()
+
+    frames = [
+        PILImage.new("RGB", (256, 256), color=(200, 50, 50)),
+        PILImage.new("RGB", (256, 256), color=(50, 200, 50)),
+    ]
+    for frame in frames:
+        await provider.process_frame(frame)
+
+    # process_frame only dispatches once the sliding window fills up; force a
+    # single inference pass directly with what we've got so this script
+    # doesn't have to wait out the full window/fps schedule.
+    await provider._run_window_inference(list(provider._frames))
+    print(f"Cosmos answer: {provider.last_answer!r}")
+
+    await provider.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())

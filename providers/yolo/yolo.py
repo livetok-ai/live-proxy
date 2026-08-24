@@ -1,10 +1,11 @@
 import asyncio
 import os
+import time
 
 from PIL.Image import Image
 from ultralytics import YOLO
 
-from logger import log_info
+from logger import log_debug, log_info
 from providers.vision_model import VisionModel
 
 
@@ -57,9 +58,22 @@ class YoloProvider(VisionModel):
         self.last_detected_Boxes = []
 
     async def process_frame(self, image: Image):
+        model = self.model
+        if model is None:
+            return
+
+        log_debug(f"YOLO frame #{self.frame_count} processing started", context=self._log_context)
+        start = time.monotonic()
+
         # Run inference in the default executor, serialized against other connections
         # sharing the same model instance (see Model.run_shared_inference).
-        results = await self.run_shared_inference(lambda: self.model(image, verbose=False))
+        results = await self.run_shared_inference(lambda: model(image, verbose=False))
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        log_debug(
+            f"YOLO frame #{self.frame_count} processing finished in {elapsed_ms:.1f}ms",
+            context=self._log_context,
+        )
 
         detected = set()
         detected_Boxes = []
@@ -70,8 +84,8 @@ class YoloProvider(VisionModel):
                 for b in result.boxes:
                     if b.cls is not None:
                         class_id = int(b.cls)
-                        if class_id in self.model.names:
-                            label = self.model.names[class_id]
+                        if class_id in model.names:
+                            label = model.names[class_id]
                             detected.add(label)
                             if hasattr(b, "xyxy") and b.xyxy is not None:
                                 coords = [round(c, 2) for c in b.xyxy[0].tolist()]

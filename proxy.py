@@ -577,10 +577,11 @@ if __name__ == "__main__":
     )
     logging.getLogger("aioice").setLevel(level=logging.WARN)
     logging.getLogger("aiortc").setLevel(level=logging.WARN)
-    logging.getLogger("websockets.server").setLevel(level=logging.WARNING)
+    logging.getLogger("websockets").setLevel(level=logging.WARNING)
     logging.getLogger("httpx").setLevel(level=logging.WARNING)
     logging.getLogger("httpcore").setLevel(level=logging.WARNING)
     logging.getLogger("google_genai.models").setLevel(level=logging.WARNING)
+    logging.getLogger("urllib3").setLevel(level=logging.WARNING)
 
     if args.cert_file:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

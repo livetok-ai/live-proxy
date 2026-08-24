@@ -20,6 +20,10 @@ DEFAULT_PROMPT = (
 
 
 class GeminiRoboticsProvider(VisionModel):
+    @staticmethod
+    def is_available() -> bool:
+        return bool(os.getenv("GOOGLE_API_KEY"))
+
     def __init__(self, name=None, connection=None, **kwargs):
         super().__init__(name=name, connection=connection, **kwargs)
         self.model = kwargs.get("model") or name
@@ -39,7 +43,7 @@ class GeminiRoboticsProvider(VisionModel):
         self.last_detected_Boxes = []
 
         log_info(
-            f"Gemini Robotics provider model: {self.model} sampling_rate: {self.sampling_rate} "
+            f"Gemini Robotics provider model: {self.model} sampling_rate: {self.sampling_rate} vertexai: Unsupported"
             f"prompt: {self.prompt}"
         )
 
@@ -48,7 +52,10 @@ class GeminiRoboticsProvider(VisionModel):
         return self.client is not None
 
     async def connect(self):
-        self.client = genai.Client(api_key=self.api_key)
+        # Force the Gemini Developer API regardless of GOOGLE_GENAI_USE_VERTEXAI:
+        # gemini-robotics-er-1.6-preview isn't published on Vertex AI, and that env
+        # var otherwise hijacks routing even when an api_key is passed explicitly.
+        self.client = genai.Client(api_key=self.api_key, vertexai=False)
 
     def clear_overlay(self):
         self.last_detected_Boxes = []

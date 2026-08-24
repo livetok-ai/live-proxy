@@ -559,10 +559,20 @@ function buildSessionParams() {
   if (document.getElementById('provider-inception')?.checked) {
     addModel('inception');
   }
+  if (document.getElementById('provider-gemini-vision')?.checked) {
+    const parameters = { sampling };
+    if (systemInstructions) parameters.prompt = systemInstructions;
+    addModel('gemini-vision', parameters);
+  }
   if (document.getElementById('provider-gemini-robotics')?.checked) {
     const parameters = { sampling };
     if (systemInstructions) parameters.prompt = systemInstructions;
     addModel('gemini-robotics', parameters);
+  }
+  if (document.getElementById('provider-gemini-robotics-live')?.checked) {
+    const parameters = { sampling };
+    if (systemInstructions) parameters.prompt = systemInstructions;
+    addModel('gemini-robotics-live', parameters);
   }
   if (document.getElementById('provider-external-websocket')?.checked) {
     addModel('external_websocket');
@@ -1023,10 +1033,12 @@ const handleProviderChange = () => {
   const inceptionChecked = document.getElementById('provider-inception')?.checked;
   const externalWebsocketChecked = document.getElementById('provider-external-websocket')?.checked;
   const mujocoChecked = document.getElementById('provider-mujoco')?.checked;
+  const geminiVisionChecked = document.getElementById('provider-gemini-vision')?.checked;
   const geminiRoboticsChecked = document.getElementById('provider-gemini-robotics')?.checked;
+  const geminiRoboticsLiveChecked = document.getElementById('provider-gemini-robotics-live')?.checked;
   const cosmosChecked = document.getElementById('provider-cosmos')?.checked;
 
-  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiRoboticsChecked || cosmosChecked) {
+  if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiVisionChecked || geminiRoboticsChecked || geminiRoboticsLiveChecked || cosmosChecked) {
     const sendVideo = document.getElementById('send-video');
     const recvVideo = document.getElementById('recv-video');
     if (sendVideo) sendVideo.checked = true;
@@ -1045,7 +1057,9 @@ document.getElementById('provider-face-landmarker')?.addEventListener('change', 
 document.getElementById('provider-sam2')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-sam3')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-inception')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-gemini-vision')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-gemini-robotics')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-gemini-robotics-live')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-external-websocket')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-cosmos')?.addEventListener('change', handleProviderChange);

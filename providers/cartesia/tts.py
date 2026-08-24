@@ -29,6 +29,10 @@ class CartesiaProvider(Model):
     Audio input is ignored, and only text input is converted to speech.
     """
 
+    @staticmethod
+    def is_available() -> bool:
+        return bool(os.getenv("CARTESIA_API_KEY"))
+
     def __init__(
         self, name=None, connection=None, voice_id: str = None, model_id: str = "sonic-3", api_key: str = None, **kwargs
     ):

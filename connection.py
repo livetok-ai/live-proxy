@@ -63,8 +63,8 @@ try:
     from providers.cosmos import CosmosProvider
     from providers.external_websocket import ExternalWebsocketProvider
     from providers.face_landmarker import FaceLandmarkerProvider
-    from providers.gemini import GeminiProvider
-    from providers.gemini_robotics import GeminiRoboticsProvider
+    from providers.gemini import GeminiProvider, GeminiVisionProvider
+    from providers.gemini_robotics import GeminiRoboticsLiveProvider, GeminiRoboticsProvider
     from providers.inception import InceptionProvider
     from providers.local_llm import LocalLLMProvider
     from providers.mujoco import MujocoProvider
@@ -88,6 +88,7 @@ finally:
 
 MODEL_MAP = {
     "gemini": GeminiProvider,
+    "gemini-vision": GeminiVisionProvider,
     "openai": OpenAIProvider,
     "yolo": YoloProvider,
     "sam": SamProvider,
@@ -102,6 +103,7 @@ MODEL_MAP = {
     "ocr": OCRProvider,
     "external_websocket": ExternalWebsocketProvider,
     "mujoco": MujocoProvider,
+    "gemini-robotics-live": GeminiRoboticsLiveProvider,
     "gemini-robotics": GeminiRoboticsProvider,
     "cosmos": CosmosProvider,
 }
@@ -582,6 +584,12 @@ class Connection:
                 return m
         return None
 
+    def get_first_enabled_model(self):
+        for m in self.models:
+            if m.input_enabled and m.output_enabled:
+                return m
+        return None
+
     def _add_transcript(self, role, content):
         if self.transcript and self.transcript[-1]["role"] == role:
             prev = self.transcript[-1]
@@ -860,7 +868,7 @@ class Connection:
                     if self._session_has_subscribers():
                         self._publish_to_session(SessionEvents.AUDIO, _to_mono(frame))
                     for m in self.models:
-                        if not m.supports_video:
+                        if m.supports_audio:
                             await m.send(frame)
 
                 except Exception as e:

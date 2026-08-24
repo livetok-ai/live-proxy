@@ -1,6 +1,7 @@
 import base64
 import contextlib
 import io
+import os
 from typing import AsyncGenerator, AsyncIterator
 
 from av import AudioFrame, AudioResampler
@@ -16,6 +17,10 @@ AUDIO_PTIME = 0.02
 
 
 class OpenAIProvider(Model):
+    @staticmethod
+    def is_available() -> bool:
+        return bool(os.getenv("OPENAI_API_KEY"))
+
     @property
     def is_llm(self) -> bool:
         return True

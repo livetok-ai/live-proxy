@@ -29,10 +29,19 @@ class Registration:
             await self._register()
             await asyncio.sleep(self.interval)
 
+    @staticmethod
+    def _available_models():
+        """Model names this instance can currently serve, i.e. every MODEL_MAP
+        alias whose provider class reports is_available() (see model.py)."""
+        from connection import MODEL_MAP
+
+        return sorted(name for name, model_cls in MODEL_MAP.items() if model_cls.is_available())
+
     async def _register(self):
         data = {
             "host": self.host,
             "port": self.port,
+            "models": self._available_models(),
             "timestamp": int(time.time() * 1000),
         }
         try:

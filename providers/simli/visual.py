@@ -22,6 +22,10 @@ AUDIO_PTIME = 0.02
 
 
 class SimliProvider(Model):
+    @staticmethod
+    def is_available() -> bool:
+        return bool(os.getenv("SIMLI_API_KEY")) and bool(os.getenv("SIMLI_FACE_ID"))
+
     @property
     def supports_audio(self) -> bool:
         return True
