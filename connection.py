@@ -799,6 +799,12 @@ class Connection:
             if self.data_channel is None:
                 self.data_channel = channel  # keep primary reference for legacy compat
 
+            if self.recorder and channel.readyState == "open":
+                try:
+                    channel.send(json.dumps({"type": "recording_started", "recording_id": self.id}))
+                except Exception as e:
+                    self.warn(f"Failed to send recording_started to channel {channel.label}: {e}")
+
             @channel.on("message")
             async def on_message(message):
                 self.last_message_time = time.time()
@@ -1014,6 +1020,12 @@ class Connection:
         if self.stats_task:
             self.stats_task.cancel()
             self.stats_task = None
+
+        if self.recorder:
+            self._broadcast_to_channels(
+                json.dumps({"type": "recording_stopped", "recording_id": self.id}), publish=False
+            )
+
         if self.pc:
             await self.pc.close()
             self.pc = None

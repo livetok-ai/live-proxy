@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import ssl
 import sys
 import time
@@ -74,6 +75,7 @@ class HTTPServer:
         self.app.router.add_get("/metrics", self.metrics_endpoint)
         self.app.router.add_get("/webtransport-info", self.webtransport_info)
         self.app.router.add_get("/websocket-info", self.websocket_info)
+        self.app.router.add_get("/recording/{recording_id}", self.download_recording)
         self.app.router.add_static("/demo", os.path.join(os.path.dirname(__file__), "demo"))
 
     async def _on_shutdown(self, app):
@@ -305,6 +307,24 @@ class HTTPServer:
                 }
             ),
         )
+
+    async def download_recording(self, request):
+        """Download a finished recording by its connection/recording id."""
+        from recorder import RECORDINGS_DIR
+
+        recording_id = request.match_info.get("recording_id")
+        if not recording_id or not re.fullmatch(r"[0-9a-fA-F-]+", recording_id):
+            raise web.HTTPBadRequest(text="Invalid recording_id")
+
+        for extension in (".mp4", ".mcap"):
+            path = os.path.join(RECORDINGS_DIR, recording_id + extension)
+            if os.path.isfile(path):
+                return web.FileResponse(
+                    path,
+                    headers={"Content-Disposition": f'attachment; filename="{recording_id}{extension}"'},
+                )
+
+        raise web.HTTPNotFound(text="Recording not found")
 
 
 def _on_connection_closed(conn_info):
