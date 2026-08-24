@@ -5,15 +5,18 @@ import time
 from av import AudioFrame, AudioResampler
 from google import genai
 from google.genai import types as genai_types
+from google.oauth2 import service_account
 from PIL.Image import Image
 
-from logger import log_info
+from logger import log_debug, log_info
 from providers.vision_model import VisionModel
 
 SAMPLE_RATE = 16000
 # Cap the rolling audio buffer so a long-running session never accumulates
 # more than a few seconds of audio in a single non-streaming request.
 MAX_AUDIO_SECONDS = 5
+
+USE_VERTEX_AI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
 
 DEFAULT_MODEL = "gemini-flash-latest"
 DEFAULT_PROMPT = "Describe the scene in one short sentence."
@@ -34,6 +37,8 @@ class GeminiVisionProvider(VisionModel):
 
     @staticmethod
     def is_available() -> bool:
+        if USE_VERTEX_AI:
+            return bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"))
         return bool(os.getenv("GOOGLE_API_KEY"))
 
     def __init__(self, name=None, connection=None, **kwargs):
@@ -59,7 +64,8 @@ class GeminiVisionProvider(VisionModel):
         self._audio_seconds = 0.0
 
         log_info(
-            f"Gemini Vision provider model: {self.model} sampling_rate: {self.sampling_rate} prompt: {self.prompt}"
+            f"Gemini Vision provider model: {self.model} vertexai: {USE_VERTEX_AI} "
+            f"sampling_rate: {self.sampling_rate} prompt: {self.prompt}"
         )
 
     @property
@@ -67,10 +73,19 @@ class GeminiVisionProvider(VisionModel):
         return self.client is not None
 
     async def connect(self):
-        # Force the Gemini Developer API: non-live vision models used here aren't
-        # necessarily published on Vertex AI, and GOOGLE_GENAI_USE_VERTEXAI would
-        # otherwise hijack routing even when an api_key is passed explicitly.
-        self.client = genai.Client(api_key=self.api_key, vertexai=False)
+        if USE_VERTEX_AI:
+            scopes = [
+                "https://www.googleapis.com/auth/generative-language",
+                "https://www.googleapis.com/auth/cloud-platform",
+            ]
+            credentials = service_account.Credentials.from_service_account_file(
+                os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"), scopes=scopes
+            )
+            self.client = genai.Client(credentials=credentials)
+        else:
+            # Force the Gemini Developer API: GOOGLE_GENAI_USE_VERTEXAI would
+            # otherwise hijack routing even when an api_key is passed explicitly.
+            self.client = genai.Client(api_key=self.api_key, vertexai=False)
 
     async def send(self, input):
         if isinstance(input, AudioFrame):
@@ -103,6 +118,12 @@ class GeminiVisionProvider(VisionModel):
         if audio_bytes:
             contents.append(genai_types.Part.from_bytes(data=audio_bytes, mime_type=f"audio/pcm;rate={SAMPLE_RATE}"))
 
+        log_debug(
+            f"GeminiVisionProvider frame #{self.frame_count} request: model={self.model} "
+            f"image_size={image.width}x{image.height} audio_bytes={len(audio_bytes) if audio_bytes else 0}",
+            context=self._log_context,
+        )
+
         start = time.monotonic()
         try:
             response = await asyncio.wait_for(
@@ -113,10 +134,22 @@ class GeminiVisionProvider(VisionModel):
                 ),
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
+        except Exception as e:
+            log_debug(
+                f"GeminiVisionProvider frame #{self.frame_count} request failed after "
+                f"{(time.monotonic() - start) * 1000:.1f}ms: {type(e).__name__}: {e}",
+                context=self._log_context,
+            )
+            raise
         finally:
             self.stats.record_processing_time(time.monotonic() - start)
 
         description = (response.text or "").strip()
+        log_debug(
+            f"GeminiVisionProvider frame #{self.frame_count} response in "
+            f"{(time.monotonic() - start) * 1000:.1f}ms: {description!r}",
+            context=self._log_context,
+        )
         if not description or description == self.last_description:
             return
 
