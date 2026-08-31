@@ -98,108 +98,126 @@
 
             <div class="md:col-span-2">
               <label class="block text-sm font-medium text-gray-700 mb-3">Model Add-ons & Processing Providers</label>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                <div class="flex items-center">
-                  <input id="provider-simli" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-simli" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Simli (Avatar)</span>
-                  </label>
+
+              <div class="border border-gray-200 rounded-lg bg-gray-50 mb-3">
+                <button type="button" onclick="toggleProviderGroup('vision-world-models')"
+                  class="w-full flex items-center justify-between px-4 py-3 text-left">
+                  <span class="text-sm font-semibold text-gray-700">Vision and World Models</span>
+                  <i id="vision-world-models-chevron" class="fas fa-chevron-down text-gray-500 transition-transform"></i>
+                </button>
+                <div id="vision-world-models-body" class="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 pb-4">
+                  <div class="flex items-center">
+                    <input id="provider-yolo" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-yolo" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>YOLO</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-face-landmarker" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-face-landmarker"
+                      class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Face Landmarker</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-sam2" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-sam2" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>SAM 2</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-sam3" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-sam3" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>SAM 3</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-inception" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-inception" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Inception</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-gemini-vision" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-gemini-vision" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Gemini Vision</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-gemini-robotics" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-gemini-robotics"
+                      class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Gemini Robotics</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-gemini-robotics-live" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-gemini-robotics-live"
+                      class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Gemini Robotics Live</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-cosmos" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-cosmos" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Cosmos</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-minimax" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-minimax" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>MiniMax H3</span>
+                    </label>
+                  </div>
                 </div>
-                <div class="flex items-center">
-                  <input id="provider-yolo" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-yolo" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>YOLO</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-face-landmarker" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-face-landmarker"
-                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Face Landmarker</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-text-sentiment" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-text-sentiment" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Text Sentiment</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-sam2" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-sam2" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>SAM 2</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-sam3" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-sam3" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>SAM 3</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-inception" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-inception" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Inception</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-gemini-vision" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-gemini-vision" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Gemini Vision</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-gemini-robotics" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-gemini-robotics"
-                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Gemini Robotics</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-gemini-robotics-live" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-gemini-robotics-live"
-                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Gemini Robotics Live</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-external-websocket" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-external-websocket"
-                    class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>External Websocket</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-mujoco" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-mujoco" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>MuJoCo</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-cosmos" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-cosmos" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>Cosmos</span>
-                  </label>
-                </div>
-                <div class="flex items-center">
-                  <input id="provider-minimax" type="checkbox"
-                    class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                  <label for="provider-minimax" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
-                    <span>MiniMax H3</span>
-                  </label>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg bg-gray-50">
+                <button type="button" onclick="toggleProviderGroup('others')"
+                  class="w-full flex items-center justify-between px-4 py-3 text-left">
+                  <span class="text-sm font-semibold text-gray-700">Others</span>
+                  <i id="others-chevron" class="fas fa-chevron-down text-gray-500 transition-transform"></i>
+                </button>
+                <div id="others-body" class="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 pb-4">
+                  <div class="flex items-center">
+                    <input id="provider-simli" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-simli" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Simli (Avatar)</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-text-sentiment" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-text-sentiment" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>Text Sentiment</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-external-websocket" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-external-websocket"
+                      class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>External Websocket</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center">
+                    <input id="provider-mujoco" type="checkbox"
+                      class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                    <label for="provider-mujoco" class="ml-2 text-sm font-medium text-gray-700 flex items-center">
+                      <span>MuJoCo</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -477,6 +495,13 @@
   </script>
 
   <script>
+    function toggleProviderGroup(groupId) {
+      const body = document.getElementById(`${groupId}-body`);
+      const chevron = document.getElementById(`${groupId}-chevron`);
+      body.classList.toggle('hidden');
+      chevron.classList.toggle('rotate-180');
+    }
+
     // Instruction Presets: each template bundles its own system instructions and tools
     const templatePresets = {
       appointment: {

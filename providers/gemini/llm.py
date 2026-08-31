@@ -18,12 +18,12 @@ MAX_AUDIO_SECONDS = 5
 
 USE_VERTEX_AI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
 
-DEFAULT_MODEL = "gemini-flash-latest"
+DEFAULT_MODEL = "gemini-3.5-flash"
 DEFAULT_PROMPT = "Describe the scene in one short sentence."
 # Without a timeout, a stalled call to the Gemini API blocks the single
 # in-flight processing slot forever, silently dropping every subsequent
 # sampled frame with no error ever logged (see VisionModel._processing gate).
-REQUEST_TIMEOUT_SECONDS = 15
+REQUEST_TIMEOUT_SECONDS = 60
 
 
 class GeminiVisionProvider(VisionModel):
@@ -113,14 +113,11 @@ class GeminiVisionProvider(VisionModel):
         self.last_description = None
 
     async def process_frame(self, image: Image):
-        contents = [self.prompt, image]
-        audio_bytes = self._take_audio()
-        if audio_bytes:
-            contents.append(genai_types.Part.from_bytes(data=audio_bytes, mime_type=f"audio/pcm;rate={SAMPLE_RATE}"))
+        contents = [image]
 
         log_debug(
             f"GeminiVisionProvider frame #{self.frame_count} request: model={self.model} "
-            f"image_size={image.width}x{image.height} audio_bytes={len(audio_bytes) if audio_bytes else 0}",
+            f"image_size={image.width}x{image.height}",
             context=self._log_context,
         )
 
@@ -130,7 +127,10 @@ class GeminiVisionProvider(VisionModel):
                 self.client.aio.models.generate_content(
                     model=self.model,
                     contents=contents,
-                    config=genai_types.GenerateContentConfig(temperature=0.4),
+                    config=genai_types.GenerateContentConfig(
+                        system_instruction=self.prompt,
+                        temperature=0.4,
+                    ),
                 ),
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
@@ -159,3 +159,29 @@ class GeminiVisionProvider(VisionModel):
     async def close(self):
         log_info("Closing Gemini Vision provider")
         self.client = None
+
+
+if __name__ == "__main__":
+    import sys
+
+    from dotenv import load_dotenv
+    from PIL import Image as PILImage
+
+    load_dotenv()
+
+    async def main():
+        provider = GeminiVisionProvider()
+        print(f"model={provider.model} vertexai={USE_VERTEX_AI} prompt={provider.prompt!r}")
+        await provider.connect()
+
+        image_path = sys.argv[1] if len(sys.argv) > 1 else None
+        if image_path:
+            image = PILImage.open(image_path).convert("RGB")
+        else:
+            image = PILImage.new("RGB", (320, 240), color=(120, 180, 220))
+
+        await provider.process_frame(image)
+        print(f"last_description={provider.last_description!r}")
+        await provider.close()
+
+    asyncio.run(main())
