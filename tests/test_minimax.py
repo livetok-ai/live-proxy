@@ -106,6 +106,8 @@ async def test_minimax_provider_generates_at_least_one_frame():
     assert call["prompt"] == provider.prompt
     assert call["num_frames"] == 5
     assert call["output"] == ["videos"]
+    assert call["height"] == provider.height
+    assert call["width"] == provider.width
     assert "image" not in call
 
     frames = await drain_output(provider, expected=5)

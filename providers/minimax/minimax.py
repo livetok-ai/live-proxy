@@ -24,6 +24,11 @@ DEFAULT_PROMPT = (
 DEFAULT_NUM_FRAMES = parse_int(os.getenv("MINIMAX_NUM_FRAMES"), 22)
 DEFAULT_FPS = parse_int(os.getenv("MINIMAX_FPS"), 24)
 DEFAULT_SEED = os.getenv("MINIMAX_SEED")
+# Without a conditioning image, the pipeline can't derive a canvas size from
+# one, so height/width must always be supplied for text-to-video — this is
+# its own default 16:9 canvas (both multiples of 32).
+DEFAULT_HEIGHT = parse_int(os.getenv("MINIMAX_HEIGHT"), 768)
+DEFAULT_WIDTH = parse_int(os.getenv("MINIMAX_WIDTH"), 1344)
 
 
 def snap_num_frames(n: int) -> int:
@@ -85,6 +90,8 @@ class MinimaxProvider(Model):
         self.prompt = kwargs.get("prompt") or (connection.system_instructions if connection else None) or DEFAULT_PROMPT
         self.num_frames = snap_num_frames(parse_int(kwargs.get("num_frames"), DEFAULT_NUM_FRAMES))
         self.fps = parse_int(kwargs.get("fps"), DEFAULT_FPS)
+        self.height = parse_int(kwargs.get("height"), DEFAULT_HEIGHT)
+        self.width = parse_int(kwargs.get("width"), DEFAULT_WIDTH)
         seed = kwargs.get("seed", DEFAULT_SEED)
         self.seed: Optional[int] = int(seed) if seed is not None else None
 
@@ -140,6 +147,10 @@ class MinimaxProvider(Model):
             call_kwargs = dict(
                 prompt=self.prompt,
                 num_frames=self.num_frames,
+                # No conditioning image, so height/width can't be derived from
+                # one (see MiniMaxH3ResizeStep) — always pass them explicitly.
+                height=self.height,
+                width=self.width,
                 output=["videos"],
             )
             if self.seed is not None:
@@ -209,9 +220,12 @@ async def _main():
     and the output queue — end to end; only the actual model weights are
     faked.
     """
-    # Avoid hanging on network calls / large downloads for weights we can't
-    # run anyway; from_pretrained() then fails fast if nothing is cached.
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    # On a machine with no CUDA GPU we can't run the real weights anyway, so
+    # avoid hanging on a network call / huge download by forcing offline mode
+    # (from_pretrained() then fails fast if nothing is cached). A real GPU
+    # box needs actual Hub access, so leave it alone there.
+    if not torch.cuda.is_available():
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
     provider = MinimaxProvider(num_frames=5)  # smallest valid clip, fastest to verify
 
