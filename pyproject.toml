@@ -46,6 +46,9 @@ dependencies = [
     "facenet-pytorch",
     "transformers>=5.12.0",
     "accelerate",
+    # MiniMax-H3 (Modular Diffusers blocks) landed on diffusers' main branch
+    # (huggingface/diffusers#14355) but hasn't reached a PyPI release yet.
+    "diffusers @ git+https://github.com/huggingface/diffusers.git",
     "opencv-python",
     "mediapipe",
     "easyocr",

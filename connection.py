@@ -67,6 +67,7 @@ try:
     from providers.gemini_robotics import GeminiRoboticsLiveProvider, GeminiRoboticsProvider
     from providers.inception import InceptionProvider
     from providers.local_llm import LocalLLMProvider
+    from providers.minimax import MinimaxProvider
     from providers.mujoco import MujocoProvider
     from providers.ocr import OCRProvider
     from providers.openai import OpenAIProvider
@@ -106,6 +107,7 @@ MODEL_MAP = {
     "gemini-robotics-live": GeminiRoboticsLiveProvider,
     "gemini-robotics": GeminiRoboticsProvider,
     "cosmos": CosmosProvider,
+    "minimax": MinimaxProvider,
 }
 
 

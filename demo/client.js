@@ -585,6 +585,11 @@ function buildSessionParams() {
     if (systemInstructions) parameters.prompt = systemInstructions;
     addModel('cosmos', parameters);
   }
+  if (document.getElementById('provider-minimax')?.checked) {
+    const parameters = {};
+    if (systemInstructions) parameters.prompt = systemInstructions;
+    addModel('minimax', parameters);
+  }
 
   const tools = JSON.parse(document.getElementById('tools').value.trim());
   const voice = document.getElementById('voice').value;
@@ -1037,6 +1042,7 @@ const handleProviderChange = () => {
   const geminiRoboticsChecked = document.getElementById('provider-gemini-robotics')?.checked;
   const geminiRoboticsLiveChecked = document.getElementById('provider-gemini-robotics-live')?.checked;
   const cosmosChecked = document.getElementById('provider-cosmos')?.checked;
+  const minimaxChecked = document.getElementById('provider-minimax')?.checked;
 
   if (simliChecked || yoloChecked || faceLandmarkerChecked || sam2Checked || sam3Checked || inceptionChecked || geminiVisionChecked || geminiRoboticsChecked || geminiRoboticsLiveChecked || cosmosChecked) {
     const sendVideo = document.getElementById('send-video');
@@ -1045,7 +1051,8 @@ const handleProviderChange = () => {
     if (recvVideo) recvVideo.checked = true;
   }
 
-  if (externalWebsocketChecked || mujocoChecked) {
+  // Text-to-video: generates output without consuming the camera.
+  if (externalWebsocketChecked || mujocoChecked || minimaxChecked) {
     const recvVideo = document.getElementById('recv-video');
     if (recvVideo) recvVideo.checked = true;
   }
@@ -1063,6 +1070,7 @@ document.getElementById('provider-gemini-robotics-live')?.addEventListener('chan
 document.getElementById('provider-external-websocket')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-mujoco')?.addEventListener('change', handleProviderChange);
 document.getElementById('provider-cosmos')?.addEventListener('change', handleProviderChange);
+document.getElementById('provider-minimax')?.addEventListener('change', handleProviderChange);
 
 // --- Active sessions ---
 var currentSessionId = null;

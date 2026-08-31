@@ -194,6 +194,7 @@ The `model` parameter (or `model` query param for RTMP) selects the provider; pr
 | `openai` | OpenAI Realtime | Speech-to-speech LLM | Requires `OPENAI_API_KEY`. |
 | `gemini-robotics` | Gemini Robotics-ER | Vision — object detection for robot manipulation | Requires `GOOGLE_API_KEY`. |
 | `cosmos` | NVIDIA Cosmos (`nvidia/Cosmos3-Nano` by default) | Vision — sliding-window video understanding, run locally via `transformers` | Downloaded and cached on first use; no API key. Needs a GPU for reasonable latency. |
+| `minimax` | MiniMax-H3 (`MiniMaxAI/MiniMax-H3` by default) | Generative — text-to-video from `prompt`/system instructions, run locally via `diffusers` Modular Diffusers | Downloaded and cached on first use; no API key. 33B params — needs a big GPU (e.g. H100); won't run on a laptop. |
 | `local_llm` | Hugging Face `transformers` | Local/self-hosted text LLM | Downloaded and cached on first use; no API key. |
 | `cartesia` | Cartesia | Text-to-speech | Requires `CARTESIA_API_KEY`. |
 | `simli` | Simli | Real-time avatar video (audio-driven talking face) | Requires `SIMLI_API_KEY` (+ `SIMLI_FACE_ID`). |
