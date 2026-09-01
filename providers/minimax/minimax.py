@@ -29,6 +29,11 @@ DEFAULT_SEED = os.getenv("MINIMAX_SEED")
 # its own default 16:9 canvas (both multiples of 32).
 DEFAULT_HEIGHT = parse_int(os.getenv("MINIMAX_HEIGHT"), 768)
 DEFAULT_WIDTH = parse_int(os.getenv("MINIMAX_WIDTH"), 1344)
+# The transformer alone is ~66GB in bf16 (33B params) — bigger than most
+# single GPUs, including a 40GB A100. Below this many free bytes it can't fit
+# whole, so block-level group offloading (streaming it layer-by-layer between
+# CPU/GPU) is needed instead of the pipeline's default whole-component swap.
+TRANSFORMER_BYTES_BF16 = 66 * 1024**3
 
 
 def snap_num_frames(n: int) -> int:
@@ -78,6 +83,21 @@ class MinimaxProvider(Model):
                 manager.enable_auto_cpu_offload(device=device)
                 pipe = ModularPipeline.from_pretrained(model_id, workflow=WORKFLOW, components_manager=manager)
                 pipe.load_components(dtype=torch.bfloat16)
+
+                if torch.cuda.is_available():
+                    free_bytes, _total_bytes = torch.cuda.mem_get_info()
+                    if free_bytes < TRANSFORMER_BYTES_BF16:
+                        log_info(
+                            f"GPU has {free_bytes / 1024**3:.1f}GB free, less than the transformer's "
+                            f"~{TRANSFORMER_BYTES_BF16 / 1024**3:.0f}GB — enabling block-level group "
+                            "offload for it instead of the pipeline's default whole-component swap."
+                        )
+                        pipe.transformer.enable_group_offload(
+                            onload_device=torch.device("cuda"),
+                            offload_device=torch.device("cpu"),
+                            offload_type="leaf_level",
+                            use_stream=True,
+                        )
                 return pipe
 
             cls._shared_pipe = await loop.run_in_executor(None, _load)
