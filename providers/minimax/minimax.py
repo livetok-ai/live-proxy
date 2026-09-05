@@ -1,8 +1,10 @@
 import asyncio
 import os
 import time
+from fractions import Fraction
 from typing import AsyncIterator, Optional
 
+import av
 import numpy as np
 import torch
 from av import VideoFrame
@@ -227,6 +229,26 @@ class MinimaxProvider(Model):
         self.pipe = None
 
 
+def _write_mp4(frames: list, path: str, fps: int):
+    """Mux a list of VideoFrame objects into an H.264 mp4, the same way
+    FileRecorder does for a live connection (see recorder.py)."""
+    container = av.open(path, mode="w")
+    stream = container.add_stream("libx264", rate=fps)
+    stream.pix_fmt = "yuv420p"
+    # yuv420p needs even dimensions; odd sizes make libx264 fail to open.
+    stream.width = frames[0].width - (frames[0].width % 2)
+    stream.height = frames[0].height - (frames[0].height % 2)
+
+    for i, frame in enumerate(frames):
+        frame.pts = i
+        frame.time_base = Fraction(1, fps)
+        for packet in stream.encode(frame):
+            container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+    container.close()
+
+
 async def _main():
     """Standalone smoke test: run with `python -m providers.minimax.minimax`.
 
@@ -274,6 +296,10 @@ async def _main():
 
     assert len(received) >= 1, "expected at least one generated frame"
     print(f"Minimax generated {len(received)} frame(s), first frame size: {received[0].width}x{received[0].height}")
+
+    output_path = os.path.abspath("minimax_output.mp4")
+    _write_mp4(received, output_path, provider.fps)
+    print(f"Wrote {output_path}")
 
     await provider.close()
 
